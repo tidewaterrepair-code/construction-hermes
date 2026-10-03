@@ -10,7 +10,8 @@ track cost and cash, and see what needs attention — from a phone.
   calculation, approval and outbound action. The phone dashboard and Hermes call the same
   service functions, so the rules are the same on both.
 
-Status: **READY IN SHADOW (demo/synthetic data) — not yet deployed to the VPS.** See
+Status: **BLOCKED for deployment** (no VPS access from the build session; no model provider key).
+The software is built, tested, and ready to commission in **SHADOW** once those exist. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) and [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md).
 
 ## What it does
