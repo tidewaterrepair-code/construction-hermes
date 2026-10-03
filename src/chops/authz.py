@@ -23,12 +23,12 @@ CAPABILITIES: dict[str, set[str]] = {
         "read:all", "read:financial", "write:crm", "write:estimate", "write:job", "write:field",
         "write:procurement", "write:billing", "write:documents", "request:approval", "decide:approval",
         "admin:settings", "admin:users", "kill:engage", "kill:release", "payment:verify", "rates:verify",
-        "learning:decide", "export:all",
+        "learning:decide", "export:all", "schedule:commit",
     },
     "office": {
         "read:all", "read:financial", "write:crm", "write:estimate", "write:job", "write:field",
         "write:procurement", "write:billing", "write:documents", "request:approval", "kill:engage",
-        "payment:verify", "rates:verify",
+        "payment:verify", "rates:verify", "schedule:commit",
     },
     # The Hermes coordinator: the owner's assistant. It can draft and request; it cannot
     # approve, verify money, release the kill switch, or change policy.
