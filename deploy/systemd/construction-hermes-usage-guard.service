@@ -1,0 +1,9 @@
+[Unit]
+Description=Construction Hermes model-usage guard (local token cap)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/construction-hermes/usage-guard.env
+ExecStart=/opt/construction-hermes/deploy/scripts/usage-guard.sh

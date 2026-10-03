@@ -34,7 +34,7 @@ x-chops: &chops
 
 services:
   db:
-    image: postgres:16.14-bookworm
+    image: postgres:16.14-bookworm@sha256:64154d0babcb1741988719e703419af0382b19953706149f9872fbd0f438efa8
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
@@ -77,7 +77,7 @@ services:
       db: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
     hostname: chops-mcp
-    command: ["serve-mcp", "--host", "0.0.0.0", "--port", "8641", "--allowed-hosts", "chops-mcp:*,mcp:*"]
+    command: ["serve-mcp", "--host", "0.0.0.0", "--port", "8641", "--allowed-hosts", "mcp:*,chops-mcp:*"]
     # Egress only for allowlisted official-source research (enforced in code).
     networks: [backend, egress]
     mem_limit: 384m
@@ -124,7 +124,7 @@ services:
 
   # Hermes Agent coordinator (official image, pinned). HERMES_HOME=/opt/data.
   hermes-init:
-    image: nousresearch/hermes-agent:v2026.9.24
+    image: nousresearch/hermes-agent:v2026.9.24@sha256:fca358f12efd65bfaaca05884166f15c0e2788375ca30d77061ac1ebc96452b7
     entrypoint: ["/bin/sh", "-c"]
     # Seed config/persona/skills once; never overwrite the owner's later edits.
     command: ["mkdir -p /opt/data/skills && cp -n /seed/config.yaml /opt/data/config.yaml && cp -n /seed/SOUL.md /opt/data/SOUL.md && cp -rn /seed/skills/construction /opt/data/skills/ && ls -la /opt/data"]
@@ -135,7 +135,7 @@ services:
     network_mode: none
 
   hermes:
-    image: nousresearch/hermes-agent:v2026.9.24
+    image: nousresearch/hermes-agent:v2026.9.24@sha256:fca358f12efd65bfaaca05884166f15c0e2788375ca30d77061ac1ebc96452b7
     command: ["gateway", "run"]
     env_file: hermes.env          # CHOPS_MCP_TOKEN, provider API key, TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS
     volumes:

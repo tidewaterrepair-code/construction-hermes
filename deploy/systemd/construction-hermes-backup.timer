@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Construction Hermes backup
+
+[Timer]
+OnCalendar=*-*-* 02:17:00 America/New_York
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

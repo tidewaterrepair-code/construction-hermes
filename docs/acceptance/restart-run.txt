@@ -1,0 +1,7 @@
+Restart persistence run (2026-10-03, demo database, this build container)
+1. Stopped web (8640) and MCP (8641) processes.
+2. Ran `chops worker --once`: OBX-2 (PROP-2 proposal email queued before restart) -> simulated (SHADOW; not sent). Exactly one dispatch.
+3. Restarted web + MCP.
+4. hermes-agent v2026.9.24 `hermes mcp test construction`: Connected, Tools discovered: 31.
+5. MCP get_record after restart: PROP-2 accepted; JOB-2 planned, contract 7942.24; outbox OBX-1/OBX-2 simulated (no duplicates).
+6. whats_next returned the owner digest from durable records.

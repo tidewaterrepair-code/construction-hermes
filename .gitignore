@@ -10,3 +10,4 @@ var/
 /backups/
 .pytest_cache/
 hermes-home/
+hermes.env

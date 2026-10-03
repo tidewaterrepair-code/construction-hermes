@@ -1,0 +1,13 @@
+[Unit]
+Description=Construction Hermes encrypted backup + restore verification
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/construction-hermes/deploy
+ExecStart=/usr/bin/docker compose -p construction-hermes --profile ops run --rm backup
+# Verify the newest archive restores (isolated temp DB; forced no-send; dropped afterwards).
+ExecStartPost=/bin/sh -c 'latest=$(ls -1t /var/backups/construction-hermes/chops-*.tar.enc | head -1); /usr/bin/docker compose -p construction-hermes --profile ops run --rm restore-test "/backups/$(basename "$latest")"'
+# Off-server copy (configure one; until then disaster recovery is INCOMPLETE):
+# ExecStartPost=/usr/bin/rclone copy /var/backups/construction-hermes remote:construction-hermes-backups

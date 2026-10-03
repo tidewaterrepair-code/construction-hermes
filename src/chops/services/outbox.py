@@ -70,8 +70,9 @@ def recover_expired_leases(session: Session) -> dict[str, int]:
     """Called at worker start and periodically. Crashed internal jobs retry; crashed external
     sends without provider idempotency become UNKNOWN for owner investigation."""
     out = {"retried": 0, "unknown": 0}
-    for j in session.scalars(select(OutboxJob).where(OutboxJob.status == "leased",
-                                                     OutboxJob.lease_expires_at < timeutil.now()).with_for_update(skip_locked=True)):
+    q = (select(OutboxJob).where(OutboxJob.status == "leased", OutboxJob.lease_expires_at < timeutil.now())
+         .with_for_update(skip_locked=True).execution_options(populate_existing=True))
+    for j in session.scalars(q):
         adapter = integrations.adapter_for(j.kind)
         if j.external_effect and not (adapter and adapter.idempotent):
             j.status = "unknown"
@@ -92,7 +93,8 @@ def _backoff(attempts: int) -> dt.timedelta:
 
 def dispatch(session: Session, job_id: int) -> str:
     """Process one leased job inside the caller's transaction. Returns the final status."""
-    j = session.get(OutboxJob, job_id)
+    # lease() updates rows with SQL; always reload so a cached object cannot hide the lease.
+    j = session.get(OutboxJob, job_id, populate_existing=True, with_for_update=True)
     if j is None or j.status != "leased":
         return "skipped"
     adapter = integrations.adapter_for(j.kind)

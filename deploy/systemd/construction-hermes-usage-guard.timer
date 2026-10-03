@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly Construction Hermes usage guard
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

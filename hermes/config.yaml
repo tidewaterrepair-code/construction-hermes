@@ -15,7 +15,7 @@ auth:
 
 mcp_servers:
   construction:
-    url: "http://127.0.0.1:8641/mcp"     # internal listener only (docker: http://chops-mcp:8641/mcp)
+    url: "${CHOPS_MCP_URL}"              # docker: http://mcp:8641/mcp ; host install: http://127.0.0.1:8641/mcp
     headers:
       Authorization: "Bearer ${CHOPS_MCP_TOKEN}"
       X-Hermes-Profile: "construction"

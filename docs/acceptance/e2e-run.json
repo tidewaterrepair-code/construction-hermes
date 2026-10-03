@@ -1,0 +1,16 @@
+{
+ "run": "6e92d5",
+ "lead": "LEAD-5",
+ "estimate": "EST-2",
+ "estimate_total": "7942.24",
+ "firm_quote_ready": true,
+ "proposal": "PROP-2",
+ "approval": "APR-3",
+ "job": "JOB-2",
+ "invoice_draft": "INV-2",
+ "invoice_number": "2026-0002",
+ "invoice_total_due": "2263.54",
+ "invoice_status": "draft",
+ "job_contract_value": "7942.24",
+ "proposal_record": "accepted"
+}

@@ -88,6 +88,21 @@ def cmd_create_user(args) -> None:
         print(f"created USR-{u.id} {u.username} ({u.role})")
 
 
+def cmd_assign_job(args) -> None:
+    from sqlalchemy import select
+
+    from .db import session_scope
+    from .models import User
+    from .refs import parse
+    from .services import jobs
+
+    with session_scope() as s:
+        u = s.scalar(select(User).where(User.username == args.username.lower()))
+        if u is None:
+            sys.exit(f"no user {args.username}")
+        print(jobs.assign_user(s, _cli_owner(s), parse(args.job, "job"), u.id, args.role))
+
+
 def cmd_serve(args) -> None:
     import uvicorn
 
@@ -207,6 +222,11 @@ def main(argv: list[str] | None = None) -> None:
     u.add_argument("--display-name", required=True)
     u.add_argument("--role", required=True, choices=["office", "foreman", "crew", "viewer", "agent"])
     u.set_defaults(fn=cmd_create_user)
+    aj = sub.add_parser("assign-job")
+    aj.add_argument("job")
+    aj.add_argument("username")
+    aj.add_argument("--role", default="foreman")
+    aj.set_defaults(fn=cmd_assign_job)
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8640)

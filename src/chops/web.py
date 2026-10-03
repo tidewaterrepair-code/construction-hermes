@@ -131,6 +131,9 @@ async def _post(request: Request, back: str, fn) -> Response:
     except ChopsError as exc:
         detail = exc.detail.get("blockers") or exc.detail.get("allowed") or ""
         return _back(back, err=f"{exc.message} {detail if detail else ''}".strip())
+    except (ValueError, ArithmeticError) as exc:
+        # Malformed form input (bad number/date): nothing was saved.
+        return _back(back, err=f"Check the values entered ({type(exc).__name__}). Nothing was saved.")
 
 
 # ====================================================================== auth

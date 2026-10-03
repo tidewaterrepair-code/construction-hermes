@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 from urllib.parse import urlparse
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import create_engine, text
 
@@ -89,8 +90,13 @@ def decrypt_stream(src: BinaryIO, dst: BinaryIO, key: bytes) -> None:
             raise ValueError("backup truncated (no final chunk)")
         n, final = struct.unpack(">IB", hdr)
         ct = src.read(n)
+        if len(ct) != n:
+            raise ValueError("backup truncated mid-chunk")
         nonce = base + struct.pack(">I", counter)
-        dst.write(aes.decrypt(nonce, ct, struct.pack(">IB", counter, final)))
+        try:
+            dst.write(aes.decrypt(nonce, ct, struct.pack(">IB", counter, final)))
+        except InvalidTag as exc:
+            raise ValueError("backup corrupted, tampered with, or wrong key") from exc
         counter += 1
         if final:
             if src.read(1):
@@ -206,7 +212,6 @@ def restore_test(archive: str, keep: bool = False) -> dict[str, Any]:
         owner_role = urlparse((s.migrate_database_url or s.database_url).replace("postgresql+psycopg://", "postgresql://")).username
         with eng.connect() as c:
             c.execute(text(f'CREATE DATABASE "{dbname}" OWNER {owner_role}'))
-        admin_u = urlparse(admin.replace("postgresql+psycopg://", "postgresql://"))
         restore_url = admin.rsplit("/", 1)[0] + f"/{dbname}"
         args, env = _pg_env(restore_url)
         proc = subprocess.run([_pg_bin("pg_restore"), *args, "-d", dbname, "--no-owner", f"--role={owner_role}",
@@ -244,7 +249,6 @@ def restore_test(archive: str, keep: bool = False) -> dict[str, Any]:
         reng.dispose()
         result["ok"] = all(v for v in result["checks"].values())
         result["restored_database"] = dbname if keep else None
-        _ = admin_u
         return result
     except Exception as exc:  # noqa: BLE001
         result["error"] = f"{type(exc).__name__}: {exc}"

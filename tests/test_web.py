@@ -105,3 +105,12 @@ def test_foreman_sees_only_assigned_job_without_money(client, session, owner, ag
     assert client.get(f"/jobs/{j2}").status_code == 403
     assert client.get("/money").status_code == 403
     assert client.get("/", follow_redirects=False).status_code == 303
+
+
+def test_malformed_form_input_is_a_message_not_a_crash(client, session, owner, agent):
+    job_id = make_job(session, owner, agent)
+    _login(client)
+    token = _csrf(client, f"/jobs/{job_id}")
+    r = client.post(f"/jobs/{job_id}/action", data={"csrf": token, "action": "cost", "kind": "material",
+                                                   "amount": "twelve", "description": "x"}, follow_redirects=False)
+    assert r.status_code == 303 and "err=" in r.headers["location"]

@@ -1,0 +1,16 @@
+# Starts the Construction Hermes compose stack at boot (Docker must be enabled).
+[Unit]
+Description=Construction Hermes stack
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/construction-hermes/deploy
+ExecStart=/usr/bin/docker compose -p construction-hermes up -d
+ExecStop=/usr/bin/docker compose -p construction-hermes stop
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

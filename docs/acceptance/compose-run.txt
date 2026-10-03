@@ -1,0 +1,14 @@
+Docker Compose wiring run (2026-10-03, build container; dockerd 29.6.2)
+Images: postgres:16.14-bookworm@sha256:64154d0b..., nousresearch/hermes-agent:v2026.9.24@sha256:fca358f1...,
+        construction-hermes/chops:0.1.0 built with INSTALL_PG_CLIENT=0 (sandbox policy denies deb.debian.org /
+        apt.postgresql.org; the default build installs postgresql-client-16 on a normal network).
+Bugs found and fixed by this run: (1) named volume /data root-owned vs uid 10001 -> image pre-creates /data,/backups
+        owned by chops; (2) MCP URL differs host vs compose -> config uses ${CHOPS_MCP_URL}; (3) port 8640 conflict
+        detected (dev server) -> runbook pre-check.
+Results:
+  migrate: "schema at 0002"; web /healthz 200 {"ok":true}; chops health ok (db, migrations, worker heartbeat, storage)
+  hermes (official image, pinned): `hermes mcp test construction` -> Transport http://mcp:8641/mcp, Connected, Tools discovered: 31
+  hermes tools list --platform telegram -> enabled: vision, skills, todo, memory, session_search, clarify + construction MCP only
+  Hermes gateway started (no messaging platform configured).
+  Published ports: only web 127.0.0.1:8640. backend network internal=true. db/mcp/worker unpublished.
+  Idle memory: hermes 232 MiB, mcp 97 MiB, web 86 MiB, worker 65 MiB, db 28 MiB (~508 MiB total). Images ~5.0 GB on disk.
