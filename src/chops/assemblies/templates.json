@@ -1,0 +1,77 @@
+[
+  {
+    "code": "deck-basic",
+    "name": "Deck - rectangular, attached (quantity template)",
+    "trade": "decks",
+    "description": "Example quantity template for a simple attached rectangular deck. Not an engineered design: joist size/spacing, beam, footing size/depth, ledger attachment and guards must be verified against the adopted code and project-specific requirements.",
+    "parameters": [
+      {"name": "length_ft", "unit": "ft", "label": "Length along house", "required": true},
+      {"name": "width_ft", "unit": "ft", "label": "Projection from house", "required": true},
+      {"name": "joist_spacing_in", "unit": "in", "label": "Joist spacing (verify)", "required": true, "default": "16"},
+      {"name": "board_face_in", "unit": "in", "label": "Decking board face width", "required": true, "default": "5.5"},
+      {"name": "footing_count", "unit": "ea", "label": "Footings (from layout)", "required": true},
+      {"name": "labor_hours_per_sqft", "unit": "hr/sqft", "label": "Crew productivity (owner data)", "required": true}
+    ],
+    "components": [
+      {"kind": "material", "description": "Joists (each spans projection)", "rate_code": "LUMBER-JOIST-LF", "unit": "lf", "qty": "(ceil(length_ft*12/joist_spacing_in)+1)*width_ft", "waste": "0.10", "cost_code": "06-framing"},
+      {"kind": "material", "description": "Rim/band and ledger boards", "rate_code": "LUMBER-JOIST-LF", "unit": "lf", "qty": "length_ft*2 + width_ft*2", "waste": "0.10", "cost_code": "06-framing"},
+      {"kind": "material", "description": "Decking boards", "rate_code": "DECKING-LF", "unit": "lf", "qty": "length_ft*width_ft*12/board_face_in", "waste": "0.10", "cost_code": "06-decking"},
+      {"kind": "material", "description": "Footing concrete (allow per footing)", "rate_code": "CONCRETE-BAG", "unit": "bag", "qty": "footing_count*4", "waste": "0", "cost_code": "03-concrete"},
+      {"kind": "material", "description": "Hangers, fasteners, flashing (allow)", "rate_code": "HARDWARE-DECK-SQFT", "unit": "sqft", "qty": "length_ft*width_ft", "waste": "0", "cost_code": "06-hardware"},
+      {"kind": "labor", "description": "Deck framing and decking labor", "rate_code": "LABOR-CARPENTER-HR", "unit": "hr", "qty": "length_ft*width_ft*labor_hours_per_sqft", "waste": "0", "cost_code": "06-labor"},
+      {"kind": "disposal", "description": "Debris disposal", "rate_code": "DISPOSAL-LOAD", "unit": "load", "qty": "1", "waste": "0", "cost_code": "01-general"}
+    ],
+    "notes": "Stairs, railings/guards, demolition and permits are separate line items."
+  },
+  {
+    "code": "wall-framing-lf",
+    "name": "Interior/exterior wall framing per linear foot (quantity template)",
+    "trade": "framing",
+    "description": "Example stud/plate count for straight walls. Openings, headers, bracing and engineered members are not included and need plans.",
+    "parameters": [
+      {"name": "wall_length_ft", "unit": "ft", "label": "Total wall length", "required": true},
+      {"name": "wall_height_ft", "unit": "ft", "label": "Wall height", "required": true},
+      {"name": "stud_spacing_in", "unit": "in", "label": "Stud spacing (verify)", "required": true, "default": "16"},
+      {"name": "labor_hours_per_lf", "unit": "hr/lf", "label": "Crew productivity (owner data)", "required": true}
+    ],
+    "components": [
+      {"kind": "material", "description": "Studs", "rate_code": "LUMBER-STUD-EA", "unit": "ea", "qty": "ceil(wall_length_ft*12/stud_spacing_in)+1", "waste": "0.10", "cost_code": "06-framing"},
+      {"kind": "material", "description": "Plates (bottom + double top)", "rate_code": "LUMBER-PLATE-LF", "unit": "lf", "qty": "wall_length_ft*3", "waste": "0.10", "cost_code": "06-framing"},
+      {"kind": "labor", "description": "Wall framing labor", "rate_code": "LABOR-CARPENTER-HR", "unit": "hr", "qty": "wall_length_ft*labor_hours_per_lf", "waste": "0", "cost_code": "06-labor"}
+    ],
+    "notes": "Labor-only framing estimates exclude the material lines automatically."
+  },
+  {
+    "code": "sunroom-shell",
+    "name": "Sunroom shell (allowance-driven template)",
+    "trade": "sunrooms",
+    "description": "Example structure for a sunroom estimate built mostly from supplier/subcontract quotes and allowances. Foundation, roof structure and attachment require plans/engineering as applicable.",
+    "parameters": [
+      {"name": "floor_area_sqft", "unit": "sqft", "label": "Floor area", "required": true},
+      {"name": "labor_hours_per_sqft", "unit": "hr/sqft", "label": "Crew productivity (owner data)", "required": true}
+    ],
+    "components": [
+      {"kind": "subcontract", "description": "Sunroom kit/system (supplier quote)", "rate_code": "SUNROOM-KIT-QUOTE", "unit": "ls", "qty": "1", "waste": "0", "cost_code": "08-sunroom"},
+      {"kind": "labor", "description": "Installation labor", "rate_code": "LABOR-CARPENTER-HR", "unit": "hr", "qty": "floor_area_sqft*labor_hours_per_sqft", "waste": "0", "cost_code": "06-labor"},
+      {"kind": "allowance", "description": "Electrical allowance", "rate_code": "ALLOW-ELECTRICAL", "unit": "ls", "qty": "1", "waste": "0", "cost_code": "26-electrical"},
+      {"kind": "delivery", "description": "Delivery", "rate_code": "DELIVERY-TRIP", "unit": "trip", "qty": "1", "waste": "0", "cost_code": "01-general"}
+    ],
+    "notes": "Electrical work must be performed by appropriately licensed trades."
+  },
+  {
+    "code": "repair-rot",
+    "name": "Rot repair - trim/board replacement (quantity template)",
+    "trade": "repairs",
+    "description": "Example small repair template. Concealed damage is common; carry an unresolved condition until opened up.",
+    "parameters": [
+      {"name": "board_lf", "unit": "lf", "label": "Replacement board length", "required": true},
+      {"name": "labor_hours", "unit": "hr", "label": "Estimated labor hours", "required": true}
+    ],
+    "components": [
+      {"kind": "material", "description": "Replacement trim/boards", "rate_code": "TRIM-LF", "unit": "lf", "qty": "board_lf", "waste": "0.15", "cost_code": "06-trim"},
+      {"kind": "material", "description": "Paint/caulk/fasteners (allow)", "rate_code": "SUNDRIES-LS", "unit": "ls", "qty": "1", "waste": "0", "cost_code": "09-finishes"},
+      {"kind": "labor", "description": "Repair labor", "rate_code": "LABOR-CARPENTER-HR", "unit": "hr", "qty": "labor_hours", "waste": "0", "cost_code": "06-labor"}
+    ],
+    "notes": "Add an unresolved condition: 'extent of concealed rot unknown until removal'."
+  }
+]
