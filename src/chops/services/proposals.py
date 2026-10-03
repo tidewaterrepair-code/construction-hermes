@@ -17,6 +17,7 @@ from ..models import Estimate, EstimateRevision, Lead, Proposal
 from ..money import ZERO, D, allocate, fmt, pct
 from ..refs import ref
 from . import audit, documents, estimates, leads, settings
+from . import settings as _settings
 
 GROUP_LABELS = {
     "labor": "Labor", "material": "Materials", "subcontract": "Subcontracted work",
@@ -247,6 +248,6 @@ def list_proposals(session: Session, actor: Actor, status: str | None = None, in
     q = select(Proposal).order_by(Proposal.id.desc()).limit(100)
     if status:
         q = q.where(Proposal.status == status)
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Proposal.is_synthetic.is_(False))
     return [proposal_view(p) for p in session.scalars(q)]

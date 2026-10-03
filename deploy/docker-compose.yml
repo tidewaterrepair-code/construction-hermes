@@ -1,0 +1,167 @@
+# Construction Hermes stack. Project name isolates volumes/networks from other workloads
+# (Trinity, OpenClaw, websites) on the same VPS. Nothing here touches other projects.
+#
+#   cd /opt/construction-hermes/deploy
+#   cp ../.env.example .env && edit .env          # secrets; chmod 600
+#   docker compose -p construction-hermes up -d --build
+#
+# Exposure: only the dashboard is published, and only on 127.0.0.1:8640. Put a private access
+# layer in front (Tailscale/WireGuard, or a reverse proxy with TLS + auth) - see docs/RUNBOOK.md.
+# The MCP tool server, database and worker are never published.
+name: construction-hermes
+
+x-chops: &chops
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: construction-hermes/chops:0.1.0
+  env_file: .env
+  environment:
+    CHOPS_DATABASE_URL: postgresql+psycopg://chops_app:${CHOPS_APP_DB_PASSWORD}@db:5432/chops
+    CHOPS_MIGRATE_DATABASE_URL: postgresql+psycopg://chops_owner:${CHOPS_OWNER_DB_PASSWORD}@db:5432/chops
+    CHOPS_DATA_DIR: /data
+    CHOPS_BACKUP_DIR: /backups
+    CHOPS_BACKUP_KEY_FILE: /run/secrets/backup_key
+  volumes:
+    - chops_data:/data
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  restart: unless-stopped
+  depends_on:
+    db: {condition: service_healthy}
+
+services:
+  db:
+    image: postgres:16.14-bookworm
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      CHOPS_OWNER_DB_PASSWORD: ${CHOPS_OWNER_DB_PASSWORD}
+      CHOPS_APP_DB_PASSWORD: ${CHOPS_APP_DB_PASSWORD}
+    volumes:
+      - chops_pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chops"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+
+  migrate:
+    <<: *chops
+    command: ["migrate"]
+    restart: "no"
+    networks: [backend]
+
+  web:
+    <<: *chops
+    depends_on:
+      db: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    command: ["serve", "--host", "0.0.0.0", "--port", "8640", "--forwarded-allow-ips", "*"]
+    ports: ["127.0.0.1:8640:8640"]
+    networks: [backend, frontend]
+    mem_limit: 384m
+    cpus: 0.75
+
+  mcp:
+    <<: *chops
+    depends_on:
+      db: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    hostname: chops-mcp
+    command: ["serve-mcp", "--host", "0.0.0.0", "--port", "8641", "--allowed-hosts", "chops-mcp:*,mcp:*"]
+    # Egress only for allowlisted official-source research (enforced in code).
+    networks: [backend, egress]
+    mem_limit: 384m
+    cpus: 0.75
+
+  worker:
+    <<: *chops
+    depends_on:
+      db: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    command: ["worker"]
+    healthcheck: {disable: true}
+    # Egress for SMTP / Telegram delivery (LIVE mode only, approved actions only).
+    networks: [backend, egress]
+    mem_limit: 256m
+    cpus: 0.5
+
+  backup:
+    <<: *chops
+    command: ["backup", "--label", "scheduled"]
+    restart: "no"
+    volumes:
+      - chops_data:/data:ro
+      - ${CHOPS_BACKUP_HOST_DIR:-/var/backups/construction-hermes}:/backups
+    secrets: [backup_key]
+    networks: [backend]
+    profiles: ["ops"]
+
+  restore-test:
+    <<: *chops
+    entrypoint: ["chops", "restore-test"]
+    restart: "no"
+    environment:
+      CHOPS_DATABASE_URL: postgresql+psycopg://chops_app:${CHOPS_APP_DB_PASSWORD}@db:5432/chops
+      CHOPS_MIGRATE_DATABASE_URL: postgresql+psycopg://chops_owner:${CHOPS_OWNER_DB_PASSWORD}@db:5432/chops
+      CHOPS_RESTORE_ADMIN_URL: postgresql+psycopg://postgres:${POSTGRES_SUPERUSER_PASSWORD}@db:5432/postgres
+      CHOPS_BACKUP_KEY_FILE: /run/secrets/backup_key
+      CHOPS_DATA_DIR: /tmp/restore-data
+    volumes:
+      - ${CHOPS_BACKUP_HOST_DIR:-/var/backups/construction-hermes}:/backups:ro
+    secrets: [backup_key]
+    networks: [backend]
+    profiles: ["ops"]
+
+  # Hermes Agent coordinator (official image, pinned). HERMES_HOME=/opt/data.
+  hermes-init:
+    image: nousresearch/hermes-agent:v2026.9.24
+    entrypoint: ["/bin/sh", "-c"]
+    # Seed config/persona/skills once; never overwrite the owner's later edits.
+    command: ["mkdir -p /opt/data/skills && cp -n /seed/config.yaml /opt/data/config.yaml && cp -n /seed/SOUL.md /opt/data/SOUL.md && cp -rn /seed/skills/construction /opt/data/skills/ && ls -la /opt/data"]
+    volumes:
+      - hermes_data:/opt/data
+      - ../hermes:/seed:ro
+    restart: "no"
+    network_mode: none
+
+  hermes:
+    image: nousresearch/hermes-agent:v2026.9.24
+    command: ["gateway", "run"]
+    env_file: hermes.env          # CHOPS_MCP_TOKEN, provider API key, TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS
+    volumes:
+      - hermes_data:/opt/data
+    depends_on:
+      hermes-init: {condition: service_completed_successfully}
+      mcp: {condition: service_started}
+    # backend reaches chops-mcp; egress reaches the model provider and Telegram.
+    # No Docker socket, no host mounts, no published ports.
+    networks: [backend, egress]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    mem_limit: 1536m
+    cpus: 1.0
+
+networks:
+  backend:
+    internal: true
+  frontend: {}
+  egress: {}
+
+volumes:
+  chops_pgdata:
+  chops_data:
+  hermes_data:
+
+secrets:
+  backup_key:
+    file: ${CHOPS_BACKUP_KEY_HOST_FILE:-/etc/construction-hermes/backup.key}

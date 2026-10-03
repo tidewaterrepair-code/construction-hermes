@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ p.ref }}{% endblock %}
+{% block content %}
+{% set c = p.content %}
+<h1>{{ p.ref }} <span class="badge">{{ p.status }}</span></h1>
+<p class="ref">{{ p.estimate }} r{{ c.revision }} · {{ c.quote_type|replace("_"," ") }} · fingerprint {{ p.content_hash[:12] }}</p>
+<section class="card">
+  <dl class="kv">
+    <dt>Customer</dt><dd>{{ c.customer.name }}</dd>
+    <dt>Site</dt><dd>{{ c.customer.site or "—" }}</dd>
+    <dt>Total</dt><dd><strong>{{ p.total|money }}</strong></dd>
+    <dt>Valid until</dt><dd>{{ c.valid_until or "terms not set" }}</dd>
+  </dl>
+  {% if p.pdf %}<p><a class="btn secondary" href="/documents/{{ p.pdf|refid }}/download">Open PDF</a></p>{% endif %}
+</section>
+<section class="card"><h2 style="margin-top:0">Payment schedule</h2>
+{% if c.milestones %}<table>{% for m in c.milestones %}<tr><td>{{ m.label }} ({{ m.pct_display }})</td><td class="num">{{ m.amount }}</td></tr>{% endfor %}</table>
+{% else %}<p class="err">Payment terms not configured (Settings → commercial_terms).</p>{% endif %}</section>
+{% if c.conditions %}<section class="card"><h2 style="margin-top:0">Disclosed conditions</h2><ul>{% for x in c.conditions %}<li>{{ x.condition }} — {{ x.resolution or "unresolved" }}</li>{% endfor %}</ul></section>{% endif %}
+
+{% if p.status in ("draft",) %}
+<form method="post" action="/proposals/{{ p.id }}/action" class="card"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="request_issue">
+<p class="muted">Issuing sends or hands this to the customer. It needs your approval of this exact revision.</p>
+<button type="submit" style="width:100%">Request approval to issue</button></form>
+{% elif p.status == "pending_approval" %}<p><a class="btn" href="/approvals/{{ p.approval|refid if p.approval else '' }}">Waiting for approval → review</a></p>
+{% endif %}
+{% if p.status == "approved" and actor.can("payment:verify") %}
+<form method="post" action="/proposals/{{ p.id }}/action" class="card"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="issued">
+<label>Delivered how? (evidence)</label><input name="evidence" placeholder="handed over at site visit 10/4" required><p><button class="secondary" type="submit">Mark delivered</button></p></form>
+{% endif %}
+{% if p.status in ("approved","issued") and actor.can("payment:verify") %}
+<form method="post" action="/proposals/{{ p.id }}/action" class="card" data-confirm="Record acceptance and create the job?"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="accept">
+<label>Acceptance evidence</label><input name="evidence" placeholder="signed PDF received by email 10/5" required>
+<label><input type="checkbox" name="after_expiry" value="1" style="width:auto;min-height:auto"> Accepting after the validity date (I confirm prices still hold)</label>
+<p><button class="ok" type="submit" style="width:100%">Customer accepted → create job</button></p></form>
+{% endif %}
+{% endblock %}

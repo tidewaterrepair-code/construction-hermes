@@ -16,6 +16,7 @@ from ..models import (Contact, Estimate, EstimateRevision, Job, JobAssignment, J
 from ..money import D, pct
 from ..refs import ref
 from . import audit, settings
+from . import settings as _settings
 
 JOB_TRANSITIONS = {
     "planned": {"active", "on_hold", "cancelled"},
@@ -143,7 +144,7 @@ def list_jobs(session: Session, actor: Actor, include_closed: bool = False, incl
         q = q.where(Job.id.in_(visible or {-1}))
     if not include_closed:
         q = q.where(Job.status.not_in(("closed", "cancelled")))
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Job.is_synthetic.is_(False))
     return [job_view(session, actor, j) for j in session.scalars(q)]
 

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Leads{% endblock %}
+{% block content %}
+<h1>Leads</h1>
+<div class="row" style="margin-bottom:12px">
+  <a class="btn" href="/leads/new">+ New lead</a>
+  <a class="btn secondary" href="/leads?overdue={{ 0 if overdue else 1 }}">{{ "All open" if overdue else "Overdue only" }}</a>
+  <a class="btn secondary" href="/leads?closed={{ 0 if closed else 1 }}">{{ "Hide won/lost" if closed else "Show won/lost" }}</a>
+</div>
+<section class="card">
+{% if rows %}
+<ul class="list">
+{% for l in rows %}
+<li><div class="grow"><a href="/leads/{{ l.id }}">{{ l.customer.name }}</a> {% if l.needs_review %}<span class="badge warn">check</span>{% endif %}
+  <div class="muted">{{ l.job_type or "job type?" }} · {{ l.status }} · <span class="ref">{{ l.ref }}</span></div>
+  {% if l.next_action %}<div class="muted">Next: {{ l.next_action }} · {{ l.next_action_due|local }}</div>{% endif %}
+</div></li>
+{% endfor %}
+</ul>
+{% else %}<p class="empty">No leads here.</p>{% endif %}
+</section>
+{% endblock %}

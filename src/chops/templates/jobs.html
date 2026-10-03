@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1>Jobs</h1>
+<section class="card">
+{% if rows %}<ul class="list">{% for j in rows %}
+<li><div class="grow"><a href="/jobs/{{ j.id }}">{{ j.name }}</a><div class="muted">{{ j.customer }} · {{ j.site or "no address" }} · <span class="ref">{{ j.ref }}</span></div></div>
+<div style="text-align:right"><span class="badge">{{ j.status }}</span>{% if j.contract_value %}<div class="muted">{{ j.contract_value|money }}</div>{% endif %}</div></li>
+{% endfor %}</ul>{% else %}<p class="empty">No open jobs{% if not actor.can("read:all") %} assigned to you{% endif %}.</p>{% endif %}
+</section>
+{% endblock %}

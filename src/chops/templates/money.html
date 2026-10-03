@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Money{% endblock %}
+{% block content %}
+<h1>Money &amp; more</h1>
+<div class="row" style="margin-bottom:12px"><a class="btn secondary" href="/system">System</a><a class="btn secondary" href="/settings">Settings</a><a class="btn secondary" href="/upload">Upload</a></div>
+
+<section class="card"><h2 style="margin-top:0">Receivables</h2>
+{% if recv %}<ul class="list">{% for r in recv %}<li><div class="grow">{{ r.number }} · <a href="/jobs/{{ r.job|refid }}">{{ r.job }}</a><div class="muted">due {{ r.due_on or "—" }}</div></div>
+<div style="text-align:right"><strong>{{ r.open_amount|money }}</strong>{% if r.days_overdue %}<div><span class="badge bad">{{ r.days_overdue }}d overdue</span></div>{% endif %}</div></li>{% endfor %}</ul>
+{% else %}<p class="empty">No open issued invoices.</p>{% endif %}</section>
+
+<section class="card"><h2 style="margin-top:0">Reported payments to verify</h2>
+<p class="muted">A customer saying “paid” is not cash. Verify against the bank deposit.</p>
+{% for p in reported %}<form method="post" action="/payments/{{ p.ref|refid }}/verify" style="border-top:1px solid var(--line);padding-top:6px"><input type="hidden" name="csrf" value="{{ csrf }}">
+<strong>{{ p.amount|money }}</strong> · {{ p.job }} · {{ p.received_on }}<label>Deposit reference</label><input name="source" required><button class="ok" type="submit">Verified</button></form>
+{% else %}<p class="empty">None.</p>{% endfor %}</section>
+
+<section class="card"><h2 style="margin-top:0">Invoices not yet issued</h2>
+<ul class="list">{% for i in drafts %}<li><div class="grow">{{ i.number }} · <a href="/jobs/{{ i.job|refid }}">{{ i.job }}</a></div><span class="badge">{{ i.status }}</span> {{ i.total_due|money }}</li>{% else %}<li class="empty">None.</li>{% endfor %}</ul></section>
+
+<section class="card"><h2 style="margin-top:0">Job-cost exceptions</h2>
+<ul class="list">{% for e in exceptions %}<li><div class="grow">{{ e.message }}<div class="muted">{{ e.type|replace("_"," ") }}</div></div></li>{% else %}<li class="empty">No exceptions.</li>{% endfor %}</ul></section>
+
+<section class="card"><h2 style="margin-top:0">Vendor / sub documents</h2>
+<ul class="list">{% for v in compliance %}<li><div class="grow">{{ v.name }}<div class="muted">{{ v.flags|join("; ") }}</div></div></li>{% else %}<li class="empty">Nothing flagged.</li>{% endfor %}</ul></section>
+{% endblock %}

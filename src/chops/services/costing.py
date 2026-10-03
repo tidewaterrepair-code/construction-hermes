@@ -20,6 +20,7 @@ from ..models import ChangeOrder, CostEntry, Invoice, Job, JobBudgetLine, Purcha
 from ..money import ZERO, D, gross_margin, q2
 from ..refs import parse, ref
 from . import audit, billing
+from . import settings as _settings
 
 
 def cost_view(c: CostEntry) -> dict[str, Any]:
@@ -203,7 +204,7 @@ def exceptions(session: Session, actor: Actor, erosion_threshold: Decimal = Deci
     require(actor, "read:financial")
     out = []
     q = select(Job).where(Job.status.in_(("planned", "active", "on_hold", "complete")))
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Job.is_synthetic.is_(False))
     today = timeutil.today_local()
     for job in session.scalars(q):

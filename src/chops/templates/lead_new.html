@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}New lead{% endblock %}
+{% block content %}
+<h1>New lead</h1>
+<form method="post" action="/leads/new" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="name">Customer name *</label><input id="name" name="name" required>
+  <div class="row">
+    <div><label for="phone">Phone</label><input id="phone" name="phone" type="tel" inputmode="tel"></div>
+    <div><label for="email">Email</label><input id="email" name="email" type="email"></div>
+  </div>
+  <label for="address">Job address</label><input id="address" name="address" autocomplete="street-address">
+  <div class="row">
+    <div><label for="city">City</label><input id="city" name="city"></div>
+    <div><label for="state">State</label><input id="state" name="state" maxlength="2"></div>
+  </div>
+  <div class="row">
+    <div><label for="jt">Job type</label>
+      <select id="jt" name="job_type"><option value="">—</option>{% for t in ["deck","framing","sunroom","repair","remodel","other"] %}<option>{{ t }}</option>{% endfor %}</select></div>
+    <div><label for="src">Source</label>
+      <select id="src" name="source">{% for t in ["phone","text","email","website","referral","walk-in","manual"] %}<option>{{ t }}</option>{% endfor %}</select></div>
+  </div>
+  <label for="scope">What do they want?</label><textarea id="scope" name="scope"></textarea>
+  <div class="row">
+    <div><label for="timing">Timing</label><input id="timing" name="timing"></div>
+    <div><label for="budget">Budget (if given)</label><input id="budget" name="budget"></div>
+  </div>
+  <p class="muted">Leave anything unknown blank. Possible duplicates are flagged, never merged automatically.</p>
+  <p><button type="submit" style="width:100%">Save lead</button></p>
+</form>
+{% endblock %}

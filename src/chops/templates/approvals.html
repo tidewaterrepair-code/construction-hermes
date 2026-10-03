@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Approvals{% endblock %}
+{% block content %}
+<h1>Approvals</h1>
+<section class="card">
+{% if pending %}
+<ul class="list">
+{% for a in pending %}
+  <li><div class="grow"><a href="/approvals/{{ a.id }}">{{ a.summary }}</a>
+    <div class="muted"><span class="ref">{{ a.ref }}</span> · {{ a.action_type }} · expires {{ a.expires_local }}</div></div>
+    {% if a.amount %}<strong>{{ a.amount|money }}</strong>{% endif %}</li>
+{% endfor %}
+</ul>
+{% else %}<p class="empty">No approvals waiting.</p>{% endif %}
+</section>
+<h2>Recent decisions</h2>
+<section class="card">
+{% if recent %}<ul class="list">{% for a in recent %}
+<li><div class="grow"><a href="/approvals/{{ a.id }}">{{ a.summary }}</a><div class="muted"><span class="ref">{{ a.ref }}</span> · via {{ a.decided_via or a.requested_via }}</div></div>
+<span class="badge {{ 'ok' if a.status == 'executed' else ('bad' if a.status in ('failed','rejected') else '') }}">{{ a.status }}</span></li>
+{% endfor %}</ul>{% else %}<p class="empty">None yet.</p>{% endif %}
+</section>
+{% endblock %}

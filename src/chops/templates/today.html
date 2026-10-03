@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Today{% endblock %}
+{% block content %}
+<h1>Today · {{ d.date }}</h1>
+<div class="row" style="margin-bottom:12px">
+  <a class="btn" href="/leads/new">+ Lead</a>
+  <a class="btn secondary" href="/upload">Upload / photo</a>
+  <a class="btn secondary" href="/jobs">Log receipt</a>
+</div>
+{% if d.nothing_urgent %}
+<div class="card empty">Nothing needs you right now.<br><span class="muted">{{ d.active_jobs }} active job(s) · {{ d.tasks_today }} task(s) today</span></div>
+{% else %}
+<section class="card" aria-label="Needs you">
+  <h2 style="margin-top:0">Needs you</h2>
+  <ul class="list">
+  {% for it in d.top %}
+    <li class="prio-{{ it.priority }}" style="padding-left:10px">
+      <div class="grow">
+        {% if it.link %}<a href="{{ it.link }}">{{ it.text }}</a>{% else %}{{ it.text }}{% endif %}
+        <div class="muted">{{ it.section }}{% if it.ref %} · <span class="ref">{{ it.ref }}</span>{% endif %}</div>
+      </div>
+    </li>
+  {% endfor %}
+  </ul>
+  {% if d.more %}<p class="muted">+{{ d.more }} more</p>{% endif %}
+</section>
+{% endif %}
+<section class="card">
+  <dl class="kv">
+    <dt>Active jobs</dt><dd>{{ d.active_jobs }}</dd>
+    <dt>Tasks today</dt><dd>{{ d.tasks_today }}</dd>
+    <dt>Unread alerts</dt><dd>{{ d.unread_notifications }}</dd>
+  </dl>
+</section>
+{% if notes %}
+<section class="card"><h2 style="margin-top:0">Alerts</h2>
+<ul class="list">{% for n in notes %}<li><div class="grow"><strong>{{ n.title }}</strong><pre>{{ n.body }}</pre></div></li>{% endfor %}</ul>
+<a href="/system">System &amp; alerts</a></section>
+{% endif %}
+{% endblock %}

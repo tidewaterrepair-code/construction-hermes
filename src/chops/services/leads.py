@@ -17,6 +17,7 @@ from ..hashing import jsonable
 from ..models import Appointment, Contact, IntegrationEvent, Lead, LeadTransition, Site
 from ..refs import ref
 from . import audit
+from . import settings as _settings
 
 TRANSITIONS: dict[str, set[str]] = {
     "inquiry": {"qualified", "site_visit", "estimating", "lost"},
@@ -302,7 +303,7 @@ def list_leads(session: Session, actor: Actor, *, status: str | None = None, ove
         q = q.where(Lead.status == status)
     elif not include_closed:
         q = q.where(Lead.status.not_in(CLOSED))
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Lead.is_synthetic.is_(False))
     if overdue_only:
         q = q.where(Lead.next_action_due < timeutil.now())

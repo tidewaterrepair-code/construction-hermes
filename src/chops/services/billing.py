@@ -25,6 +25,7 @@ from ..models import ChangeOrder, Invoice, Job, Payment, Proposal
 from ..money import ZERO, D, fmt, q2
 from ..refs import ref
 from . import audit, documents, jobs, settings
+from . import settings as _settings
 
 
 def invoice_view(inv: Invoice) -> dict[str, Any]:
@@ -264,7 +265,7 @@ def job_financials(session: Session, actor: Actor, job_id: int) -> dict[str, Any
 def receivables(session: Session, actor: Actor, include_synthetic: bool = False) -> list[dict[str, Any]]:
     require(actor, "read:financial")
     q = select(Invoice).where(Invoice.status.in_(("issued", "partially_paid"))).order_by(Invoice.due_on.asc().nulls_last())
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Invoice.is_synthetic.is_(False))
     out = []
     today = timeutil.today_local()

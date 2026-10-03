@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ e.ref }}{% endblock %}
+{% block content %}
+{% set t = e.totals %}
+<h1>{{ e.title }}</h1>
+<p class="ref">{{ e.ref }} r{{ e.revision }} · {{ e.revision_status }} · {{ e.pricing_mode|replace("_"," ") }} · {{ e.quote_type|replace("_"," ") }}{% if e.lead %} · <a href="/leads/{{ e.lead|refid }}">{{ e.lead }}</a>{% endif %}</p>
+{% if t.firm_blockers and e.quote_type == "firm" %}
+<div class="err"><strong>Firm quote blocked:</strong><ul>{% for b in t.firm_blockers %}<li>{{ b }}</li>{% endfor %}</ul></div>
+{% elif e.quote_type == "rough_range" %}<div class="card"><strong>Rough range</strong> — not a firm price.{% if t.rough_range %} {{ t.rough_range.low|money }} – {{ t.rough_range.high|money }} <span class="muted">(band: {{ t.rough_range.band.source }})</span>{% endif %}</div>{% endif %}
+
+<section class="card" aria-label="Totals">
+  <dl class="kv">
+    <dt>Direct cost</dt><dd>{{ t.direct_cost|money }}</dd>
+    {% if t.material_tax and t.material_tax != "0.00" %}<dt>Material tax</dt><dd>{{ t.material_tax|money }}</dd>{% endif %}
+    <dt>Contingency</dt><dd>{{ t.contingency|money }}</dd>
+    <dt>Overhead</dt><dd>{{ t.overhead|money }}</dd>
+    <dt>Cost basis</dt><dd><strong>{{ t.cost_basis|money }}</strong></dd>
+    <dt>Price ({{ t.profit_method }} {{ t.profit_pct|pct }})</dt><dd>{{ t.price_before_discount|money }}</dd>
+    {% if t.discount and t.discount != "0.00" %}<dt>Discount</dt><dd>-{{ t.discount|money }}</dd>{% endif %}
+    {% if t.sales_tax and t.sales_tax != "0.00" %}<dt>Sales tax</dt><dd>{{ t.sales_tax|money }}</dd>{% endif %}
+    <dt>Customer total</dt><dd><strong>{{ t.total|money }}</strong></dd>
+    <dt>Gross margin</dt><dd>{{ t.gross_margin|pct }}</dd>
+    <dt>Margin after overhead</dt><dd>{{ t.margin_after_overhead|pct }}</dd>
+  </dl>
+  {% if t.issues %}<details><summary>{{ t.issues|length }} note(s)</summary><ul>{% for i in t.issues %}<li>{{ i.message }}{% if i.blocks_firm_quote %} <span class="badge warn">blocks firm</span>{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+</section>
+
+<h2>Lines</h2>
+<section class="card scroll">
+<table><thead><tr><th>#</th><th>Item</th><th class="num">Qty</th><th class="num hide-sm">Unit cost</th><th class="num">Cost</th></tr></thead><tbody>
+{% for ln in t.lines %}{% set it = e["items"][loop.index0] %}
+<tr><td>{{ ln.line }}</td><td>{{ ln.description }}<div class="muted">{{ ln.kind }}{% if it.rate_status %} · <span class="badge {{ 'ok' if it.rate_status in ('verified','owner_entered') else 'warn' }}">{{ it.rate_status }}</span>{% endif %}{% if it.rate_source %} · {{ it.rate_source }}{% endif %}</div>
+{% if ln.state == "missing" %}<span class="badge bad">missing</span>{% elif ln.state == "excluded_customer_supplied" %}<span class="badge">customer-supplied</span>{% endif %}
+{% if e.revision_status == "draft" %}<details><summary>Fix / remove</summary>
+<form method="post" action="/estimates/{{ e.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="set_cost"><input type="hidden" name="line" value="{{ ln.line }}">
+<div class="row"><div><label>Qty</label><input name="quantity" inputmode="decimal" value="{{ ln.quantity or '' }}"></div><div><label>Unit cost</label><input name="unit_cost" inputmode="decimal"></div></div>
+<label>Cost source</label><input name="cost_source" placeholder="quote #, invoice, owner"><p><button type="submit">Save line</button></p></form>
+<form method="post" action="/estimates/{{ e.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="remove_line"><input type="hidden" name="line" value="{{ ln.line }}"><button class="danger" type="submit">Remove</button></form>
+</details>{% endif %}</td>
+<td class="num">{{ ln.quantity|qty }} {{ ln.unit or "" }}<div class="muted">{{ ("@ " ~ (ln.unit_cost|money)) if ln.unit_cost else "" }}</div></td><td class="num hide-sm">{{ ln.unit_cost|money if ln.unit_cost else "—" }}</td><td class="num">{{ ln.cost|money if ln.cost else "—" }}</td></tr>
+{% else %}<tr><td colspan="5" class="empty">No lines yet.</td></tr>{% endfor %}
+</tbody></table>
+</section>
+
+{% if e.dimensions %}<details class="card"><summary>Dimensions &amp; sources</summary><table>{% for k, d in e.dimensions.items() %}<tr><td>{{ d.label or k }}</td><td class="num">{{ d.value or "—" }} {{ d.unit or "" }}</td><td><span class="badge {{ 'ok' if d.source in ('field_measured','plans') else 'warn' }}">{{ d.source }}</span></td></tr>{% endfor %}</table></details>{% endif %}
+
+{% if e.revision_status == "draft" %}
+<details class="card"><summary>Add a line</summary>
+<form method="post" action="/estimates/{{ e.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="line">
+<div class="row"><div><label>Kind</label><select name="kind">{% for k in ["material","labor","subcontract","equipment","delivery","disposal","allowance","other"] %}<option>{{ k }}</option>{% endfor %}</select></div>
+<div><label>Cost code</label><input name="cost_code"></div></div>
+<label>Description</label><input name="description" required>
+<div class="row"><div><label>Qty</label><input name="quantity" inputmode="decimal"></div><div><label>Unit</label><input name="unit"></div><div><label>Waste %</label><input name="waste_pct" inputmode="decimal" placeholder="0"></div></div>
+<label>Rate from library</label><select name="rate_code"><option value="">— or enter a cost below —</option>{% for r in rate_list %}<option value="{{ r.code }}">{{ r.code }} · {{ r.unit_cost|money }}/{{ r.unit }} ({{ r.status }})</option>{% endfor %}</select>
+<div class="row"><div><label>Unit cost</label><input name="unit_cost" inputmode="decimal"></div><div><label>Cost source</label><input name="cost_source"></div></div>
+<p><button type="submit">Add line</button></p></form></details>
+
+<details class="card"><summary>Apply a template</summary>
+{% for a in assemblies %}
+<form method="post" action="/estimates/{{ e.id }}/action" style="border-top:1px solid var(--line);padding-top:8px"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="assembly"><input type="hidden" name="assembly" value="{{ a.code }}">
+<h3>{{ a.name }}</h3><p class="muted">{{ a.description }}</p>
+{% for p in a.parameters %}<div class="row"><div><label>{{ p.label }} ({{ p.unit }})</label><input name="p_{{ p.name }}" inputmode="decimal" value="{{ p.default or '' }}"></div>
+<div><label>Source</label><select name="src_{{ p.name }}">{% for s in ["field_measured","plans","customer_supplied","photo_estimate","assumed"] %}<option {{ 'selected' if s == 'assumed' }}>{{ s }}</option>{% endfor %}</select></div></div>{% endfor %}
+<p><button type="submit">Apply {{ a.code }}</button></p></form>
+{% endfor %}</details>
+
+<details class="card"><summary>Scope, exclusions, conditions</summary>
+<form method="post" action="/estimates/{{ e.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="text">
+<label>Scope summary</label><textarea name="scope_summary">{{ e.scope_summary or '' }}</textarea>
+<label>Add inclusion</label><input name="add_inclusion"><label>Add exclusion</label><input name="add_exclusion">
+<label>Add assumption</label><input name="add_assumption"><label>Add unresolved site condition</label><input name="add_condition">
+<p><button type="submit">Save</button></p></form>
+{% for c in e.unresolved_conditions %}<p>{{ loop.index0 }}. {{ c.condition }} — {{ c.resolution or "unresolved" }}</p>{% endfor %}
+{% if e.unresolved_conditions %}<form method="post" action="/estimates/{{ e.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="text">
+<div class="row"><div><label>Condition #</label><input name="resolve_condition" type="number"></div><div><label>Resolution</label><input name="resolution" placeholder="carried as allowance / excluded"></div></div><p><button type="submit">Resolve</button></p></form>{% endif %}
+</details>
+
+{% if actor.can("rates:verify") %}
+<details class="card"><summary>Pricing policy (owner)</summary>
+<form method="post" action="/estimates/{{ e.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="policy">
+<div class="row"><div><label>Quote type</label><select name="quote_type"><option {{ 'selected' if e.quote_type=='rough_range' }}>rough_range</option><option {{ 'selected' if e.quote_type=='firm' }}>firm</option></select></div>
+<div><label>Profit method</label><select name="profit_method"><option {{ 'selected' if e.policy.profit_method=='margin' }}>margin</option><option {{ 'selected' if e.policy.profit_method=='markup' }}>markup</option></select></div></div>
+<div class="row"><div><label>Profit (e.g. 0.30 or 30%)</label><input name="profit_pct" value="{{ e.policy.profit_pct or '' }}"></div><div><label>Overhead</label><input name="overhead_pct" value="{{ e.policy.overhead_pct or '' }}"></div><div><label>Contingency</label><input name="contingency_pct" value="{{ e.policy.contingency_pct or '' }}"></div></div>
+<div class="row"><div><label>Labor burden</label><input name="labor_burden_pct" value="{{ e.policy.labor_burden_pct or '' }}"></div>
+<div><label>Tax mode</label><select name="tax_mode">{% for m in ["unconfigured","none","contractor_pays_material_tax","sales_tax_on_price"] %}<option {{ 'selected' if e.policy.tax_mode==m }}>{{ m }}</option>{% endfor %}</select></div></div>
+<div class="row"><div><label>Material tax rate</label><input name="material_tax_pct" value="{{ e.policy.material_tax_pct or '' }}"></div><div><label>Sales tax rate</label><input name="sales_tax_pct" value="{{ e.policy.sales_tax_pct or '' }}"></div><div><label>Discount $</label><input name="discount_amount" value="{{ e.policy.discount_amount or '' }}"></div></div>
+<p><button type="submit">Save policy</button></p></form></details>
+{% endif %}
+<form method="post" action="/estimates/{{ e.id }}/action" class="card"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="proposal">
+<label>Proposal shows</label><select name="presentation"><option value="summary">Summary by category</option><option value="line_items">Line items</option></select>
+<p><button type="submit" style="width:100%">Build proposal (locks this revision)</button></p></form>
+{% else %}
+<form method="post" action="/estimates/{{ e.id }}/action" class="card"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="revision">
+<p class="muted">This revision is {{ e.revision_status }}. Changes need a new revision (and a new approval).</p>
+<label>Reason</label><input name="reason" required><p><button type="submit">Start revision {{ e.revision + 1 }}</button></p></form>
+{% endif %}
+
+{% if props %}<h2>Proposals</h2><section class="card"><ul class="list">{% for p in props %}<li><div class="grow"><a href="/proposals/{{ p.id }}">{{ p.ref }}</a> · {{ p.total|money }}</div><span class="badge">{{ p.status }}</span></li>{% endfor %}</ul></section>{% endif %}
+<p class="muted">Revisions: {% for r in e.revisions %}<a href="/estimates/{{ e.id }}?rev={{ r.revision }}">r{{ r.revision }}</a> ({{ r.status }}) {% endfor %}</p>
+{% endblock %}

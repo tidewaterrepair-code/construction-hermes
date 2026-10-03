@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="muted">Anything blank is treated as <strong>not configured</strong> and shown that way on documents. Nothing is guessed.</p>
+{% if actor.can("admin:settings") %}
+<section class="card"><h2 style="margin-top:0">Approvals in chat</h2>
+<p class="muted">Lets you approve from the Hermes chat via its approval prompt. Turn on only if the Hermes gateway allowlist contains just your own account.</p>
+<form method="post" action="/settings" class="row"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="key" value="channel_approvals">
+<select name="value"><option value="0" {{ 'selected' if not channel_approvals }}>off (dashboard only)</option><option value="1" {{ 'selected' if channel_approvals }}>on</option></select><button type="submit">Save</button></form></section>
+{% for key, desc in known.items() %}
+<details class="card"><summary>{{ key }} {% if cur.get(key) is none %}<span class="badge warn" style="margin-left:8px">not set</span>{% endif %}</summary>
+<p class="muted">{{ desc }}</p>
+<form method="post" action="/settings"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ key }}">
+<textarea name="value" rows="4" aria-label="{{ key }}">{% if cur.get(key) is not none %}{{ cur.get(key)|tojson_pretty if cur.get(key) is not string else cur.get(key) }}{% endif %}</textarea>
+<p><button type="submit">Save {{ key }}</button></p></form></details>
+{% endfor %}
+{% else %}<p>Only the owner can change settings.</p>{% endif %}
+{% endblock %}

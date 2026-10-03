@@ -29,6 +29,7 @@ from ..models import Approval
 from ..money import D
 from ..refs import ref
 from . import audit, settings
+from . import settings as _settings
 
 
 @dataclass
@@ -164,7 +165,7 @@ def _expire_if_due(a: Approval) -> None:
 def list_pending(session: Session, actor: Actor, include_synthetic: bool = False) -> list[dict[str, Any]]:
     require(actor, "read:all")
     q = select(Approval).where(Approval.status == "pending").order_by(Approval.created_at)
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Approval.is_synthetic.is_(False))
     out = []
     for a in session.scalars(q):

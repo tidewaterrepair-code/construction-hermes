@@ -29,6 +29,7 @@ def _item(priority: int, section: str, text: str, link: str | None = None, ref_:
 def today(session: Session, actor: Actor, include_synthetic: bool = False, max_items: int = 10) -> dict[str, Any]:
     require(actor, "read:financial")
     items: list[dict[str, Any]] = []
+    include_synthetic = settings.include_synthetic(session, include_synthetic)
     syn = (lambda q, m: q) if include_synthetic else (lambda q, m: q.where(m.is_synthetic.is_(False)))
     now = timeutil.now()
     t_local = timeutil.today_local()

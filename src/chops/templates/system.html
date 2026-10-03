@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}System{% endblock %}
+{% block content %}
+<h1>System</h1>
+<section class="card"><h2 style="margin-top:0">Health {% if h.ok %}<span class="badge ok">OK</span>{% else %}<span class="badge bad">problem</span>{% endif %}</h2>
+<dl class="kv">{% for k, v in h.checks.items() %}<dt>{{ k }}</dt><dd>{% if v.ok %}<span class="badge ok">ok</span>{% else %}<span class="badge {{ 'warn' if v.warn_only else 'bad' }}">{{ v.detail }}</span>{% endif %}</dd>{% endfor %}
+<dt>Mode</dt><dd>{{ mode }}</dd><dt>Data</dt><dd>{{ env }}</dd></dl></section>
+
+<section class="card"><h2 style="margin-top:0">Kill switch</h2>
+{% if kill.engaged %}<p class="err">ON since {{ kill.at|local }} by {{ kill.by }}: {{ kill.reason }}</p>
+{% if actor.can("kill:release") %}<form method="post" action="/system/action" data-confirm="Release the kill switch? Queued external actions may resume."><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="kill_off"><label>Reason</label><input name="reason" required><p><button type="submit">Release</button></p></form>{% endif %}
+{% else %}<p class="muted">Off. Engaging it blocks new external sends immediately; it is rechecked right before every dispatch. Messages already accepted by a provider cannot be recalled.</p>
+<form method="post" action="/system/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="kill_on"><label>Reason</label><input name="reason"><p><button class="danger" type="submit" style="width:100%">Engage kill switch</button></p></form>{% endif %}
+</section>
+
+{% if actor.can("admin:settings") %}
+<details class="card"><summary>Operating mode ({{ mode }})</summary>
+<p class="muted">BUILD/SHADOW: outbound actions are recorded as simulated. LIVE: approved actions are delivered through connected integrations.</p>
+<form method="post" action="/system/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="mode">
+<select name="mode">{% for m in ["BUILD","SHADOW","LIVE"] %}<option {{ 'selected' if m == mode }}>{{ m }}</option>{% endfor %}</select>
+<label>Type LIVE to confirm going live</label><input name="confirm_live" autocomplete="off"><p><button type="submit">Set mode</button></p></form></details>
+{% endif %}
+
+<section class="card"><h2 style="margin-top:0">Integrations</h2>
+<div class="scroll"><table><thead><tr><th>Name</th><th>Status</th><th>Verified</th><th>Last OK</th></tr></thead><tbody>
+{% for i in integ %}<tr><td>{{ i.name }}<div class="muted">{{ i.detail or "" }}</div></td><td><span class="badge {{ 'ok' if i.status == 'connected' else ('bad' if i.status == 'degraded' else '') }}">{{ i.status }}</span></td><td>{{ i.verification }}</td><td>{{ i.last_success_at|local if i.last_success_at else "—" }}{% if i.last_error %}<div class="muted">{{ i.last_error }}</div>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></section>
+
+<section class="card"><h2 style="margin-top:0">Outbound queue</h2>
+<ul class="list">{% for o in obx %}<li><div class="grow">{{ o.kind }} <span class="badge {{ 'ok' if o.status in ('succeeded','simulated') else ('bad' if o.status in ('unknown','dead','failed','blocked') else '') }}">{{ o.status }}</span>
+<div class="muted"><span class="ref">{{ o.ref }}</span> {{ o.approval or "" }} · attempts {{ o.attempts }} {{ o.last_error or "" }}</div>
+{% if o.status in ("unknown","blocked","dead","failed") and actor.can("decide:approval") %}
+<form method="post" action="/system/action" class="row"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="outbox"><input type="hidden" name="job" value="{{ o.ref|refid }}">
+<select name="outcome"><option value="delivered">I confirmed it was delivered</option><option value="resend">Send once more</option><option value="abandon">Abandon</option></select><input name="evidence" placeholder="what you checked" required><button class="secondary" type="submit">Resolve</button></form>{% endif %}
+</div></li>{% else %}<li class="empty">Nothing queued.</li>{% endfor %}</ul></section>
+
+{% if actor.can("admin:settings") %}
+<section class="card"><h2 style="margin-top:0">Routines</h2><p class="muted">Off until you turn them on. They send nothing when nothing changed. Telegram delivery needs the Telegram integration and LIVE mode.</p>
+{% for r in routines %}<form method="post" action="/system/action" class="row" style="border-top:1px solid var(--line);padding-top:6px"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="routine"><input type="hidden" name="name" value="{{ r.name }}">
+<div style="flex:2 1 200px">{{ r.description }}<div class="muted">{{ r.local_time }} ET · days {{ r.weekdays }} · last {{ r.last_run_at|local if r.last_run_at else "never" }} {{ r.last_result or "" }}</div></div>
+<select name="enabled"><option value="1" {{ 'selected' if r.enabled }}>on</option><option value="0" {{ 'selected' if not r.enabled }}>off</option></select>
+<select name="channel"><option {{ 'selected' if r.channel == 'dashboard' }}>dashboard</option><option {{ 'selected' if r.channel == 'telegram' }}>telegram</option></select><button class="secondary" type="submit">Save</button></form>{% endfor %}</section>
+<p><a class="btn secondary" href="/export">Export all company data (zip)</a></p>
+{% endif %}
+
+<details class="card"><summary>Recent activity (audit)</summary><p class="muted">Append-only for the application role; a database administrator can still alter it.</p>
+<ul class="list">{% for a in audit %}<li><div class="grow">{{ a.action }} <span class="ref">{{ a.entity_type or "" }}{{ (":" ~ a.entity_id) if a.entity_id else "" }}</span><div class="muted">{{ a.at|local }} · {{ a.actor_role }} via {{ a.via }}</div></div></li>{% endfor %}</ul></details>
+
+<details class="card"><summary>Users</summary><ul class="list">{% for u in users_list %}<li>{{ u.display_name }} <span class="badge">{{ u.role }}</span> <span class="ref">{{ u.username }}</span></li>{% endfor %}</ul>
+<p class="muted">Add users from the server: <code>chops create-user NAME --display-name "..." --role foreman</code></p></details>
+<form method="post" action="/system/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="notes_read"><button class="secondary" type="submit">Mark alerts read</button></form>
+{% endblock %}

@@ -90,6 +90,11 @@ def environment(session: Session) -> str:
     return get(session, "environment", "prod")
 
 
+def include_synthetic(session: Session, requested: bool = False) -> bool:
+    """Production views hide synthetic records; demo/restore-test databases show them (they hold nothing else)."""
+    return requested or environment(session) != "prod"
+
+
 # ------------------------------------------------------------------ kill switch
 
 

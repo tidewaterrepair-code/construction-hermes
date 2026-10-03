@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>{% block title %}Construction Hermes{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <span class="co">{{ company }}</span>
+  {% if env != "prod" %}<span class="badge warn">{{ env|upper }} DATA</span>{% endif %}
+  <span class="badge {{ 'ok' if mode == 'LIVE' else 'warn' }}" title="Operating mode">{{ mode }}</span>
+  {% if actor %}
+  <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" style="min-height:36px;color:inherit;border-color:currentColor" aria-label="Sign out">Out</button></form>
+  {% endif %}
+</header>
+{% if kill and kill.engaged %}<div class="kill" role="alert">KILL SWITCH ON — external actions blocked. {{ kill.reason }}</div>{% endif %}
+<main>
+{% if flash %}<div class="flash" role="status">{{ flash }}</div>{% endif %}
+{% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+{% if actor %}
+<nav class="bottom" aria-label="Main">
+  {% set p = request.url.path %}
+  {% if actor.can("read:financial") %}<a href="/" class="{{ 'on' if p == '/' }}">Today</a>{% endif %}
+  {% if actor.can("read:all") %}<a href="/leads" class="{{ 'on' if p.startswith('/leads') }}">Leads</a>{% endif %}
+  <a href="/jobs" class="{{ 'on' if p.startswith('/jobs') }}">Jobs</a>
+  {% if actor.can("read:financial") %}<a href="/approvals" class="{{ 'on' if p.startswith('/approvals') }}">Approve{% if pending_count %}<span class="dot">{{ pending_count }}</span>{% endif %}</a>{% endif %}
+  {% if actor.can("read:financial") %}<a href="/money" class="{{ 'on' if p.startswith('/money') or p.startswith('/system') or p.startswith('/settings') }}">More</a>
+  {% else %}<a href="/upload" class="{{ 'on' if p.startswith('/upload') }}">Upload</a>{% endif %}
+</nav>
+{% endif %}
+</body>
+</html>

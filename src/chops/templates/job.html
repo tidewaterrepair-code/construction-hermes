@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ j.name }}{% endblock %}
+{% block content %}
+<h1>{{ j.name }} <span class="badge">{{ j.status }}</span></h1>
+<p class="ref">{{ j.ref }} · {{ j.customer }} · {{ j.site or "" }}{% if j.source_proposal %} · <a href="/proposals/{{ j.source_proposal|refid }}">{{ j.source_proposal }}</a>{% endif %}</p>
+<div class="row" style="margin-bottom:12px">
+  <a class="btn secondary" href="#log">Daily log</a>
+  {% if fin %}<a class="btn secondary" href="#cost">Log cost</a>{% endif %}
+  <a class="btn secondary" href="/upload?job={{ j.id }}">Photo / file</a>
+</div>
+
+{% if fin %}
+<section class="card" aria-label="Money">
+<h2 style="margin-top:0">Money</h2>
+<dl class="kv">
+  <dt>Approved contract</dt><dd><strong>{{ fin.approved_contract_value|money }}</strong></dd>
+  <dt>Pending change orders (not revenue)</dt><dd>{{ fin.pending_change_orders_not_revenue|money }}</dd>
+  <dt>Invoiced</dt><dd>{{ fin.invoiced|money }}</dd>
+  <dt>Collected (verified)</dt><dd>{{ fin.collected_cash_verified|money }}</dd>
+  <dt>Reported, unverified</dt><dd>{{ fin.reported_payments_unverified|money }}</dd>
+  <dt>Retainage receivable</dt><dd>{{ fin.retainage_receivable|money }}</dd>
+  <dt>Left to invoice</dt><dd>{{ fin.left_to_invoice|money }}</dd>
+</dl>
+</section>
+<section class="card"><h2 style="margin-top:0">Job cost</h2>
+<dl class="kv"><dt>Estimated GM</dt><dd>{{ costs.estimated_gross_margin|pct }}</dd><dt>Projected GM</dt><dd>{{ costs.projected_gross_margin|pct }}</dd>
+<dt>Unreviewed costs</dt><dd>{{ costs.unreviewed_costs }}</dd></dl>
+<div class="scroll"><table><thead><tr><th>Code</th><th class="num">Est.</th><th class="num hide-sm">Committed</th><th class="num">Actual</th><th class="num">Projected</th></tr></thead><tbody>
+{% for r in costs.rows %}<tr><td>{{ r.cost_code }}{% if r.over_budget %} <span class="badge bad">over</span>{% endif %}</td><td class="num">{{ r.estimated|money }}</td><td class="num hide-sm">{{ r.committed|money }}</td><td class="num">{{ r.actual|money }}</td><td class="num">{{ r.projected_final|money }}</td></tr>{% endfor %}
+</tbody></table></div></section>
+
+<section class="card"><h2 style="margin-top:0">Invoices</h2>
+{% for inv in invoices %}<div style="border-bottom:1px solid var(--line);padding:6px 0"><strong>{{ inv.number }}</strong> {{ inv.total_due|money }} <span class="badge">{{ inv.status }}</span> <span class="muted">{{ inv.milestone }}</span>
+{% if inv.status == "draft" %}<form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="invoice_issue"><input type="hidden" name="invoice" value="{{ inv.id }}"><button class="secondary" type="submit">Request approval to issue</button></form>{% endif %}
+{% if inv.status in ("issued","partially_paid") %}<details><summary>Record payment</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="payment"><input type="hidden" name="invoice" value="{{ inv.id }}">
+<div class="row"><div><label>Amount</label><input name="amount" inputmode="decimal" required></div><div><label>Received</label><input name="received_on" type="date" required></div></div>
+<label>Verified against (deposit ref) — leave blank if only reported</label><input name="source"><p><button type="submit">Save payment</button></p></form></details>{% endif %}
+</div>{% else %}<p class="muted">No invoices yet.</p>{% endfor %}
+{% if milestones %}<form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="invoice">
+<label>Draft invoice for milestone</label><select name="milestone">{% for m in milestones %}<option value="{{ m.key }}">{{ m.label }} · {{ m.amount }}</option>{% endfor %}</select><p><button type="submit">Draft invoice</button></p></form>{% endif %}
+</section>
+
+<details class="card" id="cost"><summary>Log a cost / receipt</summary>
+<form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="cost">
+<div class="row"><div><label>Kind</label><select name="kind">{% for k in ["material","labor","subcontract","equipment","other"] %}<option>{{ k }}</option>{% endfor %}</select></div><div><label>Amount</label><input name="amount" inputmode="decimal" required></div></div>
+<label>Description</label><input name="description" required>
+<div class="row"><div><label>Vendor</label><input name="vendor"></div><div><label>Cost code</label><input name="cost_code"></div><div><label>Date</label><input name="occurred_on" type="date"></div></div>
+<p class="muted">Attach the receipt photo with “Photo / file” (kind: receipt).</p><p><button type="submit">Log cost</button></p></form></details>
+{% endif %}
+
+<section class="card"><h2 style="margin-top:0">Schedule</h2>
+{% for c in sched.conflicts %}<div class="err">{{ c.message }}</div>{% endfor %}
+{% for a in sched.advisories %}<p class="muted">⚠ {{ a.message }}</p>{% endfor %}
+<ul class="list">{% for t in sched.tasks %}<li><div class="grow">{{ t.name }} <span class="badge">{{ t.status }}</span>{% if t.weather_sensitive %} <span class="badge warn">weather</span>{% endif %}
+<div class="muted">{{ t.starts_local }} → {{ t.ends_local }} · {{ t.crew|join(", ") or "no crew" }} · <span class="ref">{{ t.ref }}</span></div>
+<form method="post" action="/jobs/{{ j.id }}/action" class="row"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="task_status"><input type="hidden" name="task" value="{{ t.id }}">
+<select name="status" aria-label="status">{% for s in ["todo","scheduled","in_progress","blocked","done"] %}<option {{ 'selected' if s == t.status }}>{{ s }}</option>{% endfor %}</select><button class="secondary" type="submit">Set</button></form></div></li>
+{% else %}<li class="empty">No tasks.</li>{% endfor %}</ul>
+{% if actor.can("write:job") %}<details><summary>Add task</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="task">
+<label>Task</label><input name="name" required><div class="row"><div><label>Start</label><input name="starts_at" type="datetime-local"></div><div><label>End</label><input name="ends_at" type="datetime-local"></div><div><label>Hours</label><input name="hours" inputmode="decimal"></div></div>
+{% if crew %}<label>Crew</label><select name="crew"><option value="">—</option>{% for c in crew %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>{% endif %}
+<label><input type="checkbox" name="weather" value="1" style="width:auto;min-height:auto"> Weather-sensitive</label><p><button type="submit">Add task</button></p></form></details>{% endif %}
+</section>
+
+<section class="card" id="log"><h2 style="margin-top:0">Daily logs</h2>
+<form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="log">
+<label>Field note (kept word for word)</label><textarea name="note" required></textarea>
+<details><summary>Structured fields (optional)</summary><label>Work completed</label><input name="work_completed"><label>Delays</label><input name="delays"><label>Issues</label><input name="issues"><label>Tomorrow</label><input name="tomorrow_plan"></details>
+<p><button type="submit">Save draft log</button></p></form>
+{% for l in logs %}<div style="border-top:1px solid var(--line);padding-top:6px"><strong>{{ l.date }}</strong> <span class="badge">{{ l.status }}</span><p>{{ l.original_note }}</p></div>{% endfor %}
+</section>
+
+<section class="card"><h2 style="margin-top:0">Change orders</h2>
+{% for co in cos %}<div style="border-bottom:1px solid var(--line);padding:6px 0">#{{ co.number }} r{{ co.revision }} {{ co.title }} · {{ co.price|money }} <span class="badge {{ 'ok' if co.counts_as_revenue else 'warn' }}">{{ co.status }}</span>
+{% if co.status == "draft" and actor.can("request:approval") %}<form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="co_issue"><input type="hidden" name="co" value="{{ co.id }}"><button class="secondary" type="submit">Request approval to issue</button></form>{% endif %}
+{% if co.status in ("approved_to_issue","issued") and actor.can("payment:verify") %}<form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="co_customer"><input type="hidden" name="co" value="{{ co.id }}"><label>Customer approval evidence</label><input name="evidence" required><button type="submit">Customer approved</button></form>{% endif %}
+</div>{% else %}<p class="muted">None.</p>{% endfor %}
+{% if actor.can("write:job") %}<details><summary>New change order</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="co">
+<label>Title</label><input name="title" required><label>Scope</label><textarea name="scope" required></textarea>
+<div class="row"><div><label>Price</label><input name="price" inputmode="decimal" required></div><div><label>Est. cost</label><input name="estimated_cost" inputmode="decimal"></div><div><label>Schedule days</label><input name="days" type="number" value="0"></div></div>
+<p><button type="submit">Draft change order</button></p></form></details>{% endif %}
+</section>
+
+<section class="card"><h2 style="margin-top:0">Permits, inspections, punch</h2>
+{% for g in comp.gaps %}<p class="muted">⚠ {{ g }}</p>{% endfor %}
+{% for p in comp.permits %}<p>{{ p.type }} <span class="badge">{{ p.status }}</span> <span class="ref">{{ p.ref }}</span> {{ p.status_source or "" }}</p>
+{% if actor.can("payment:verify") %}<details><summary>Update {{ p.ref }}</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="permit_update"><input type="hidden" name="permit" value="{{ p.id }}">
+<select name="status">{% for s in ["not_determined","not_required_verified","required","applied","issued","expired","closed"] %}<option {{ 'selected' if s == p.status }}>{{ s }}</option>{% endfor %}</select><label>Source (permit #, portal, letter)</label><input name="source"><p><button type="submit">Save</button></p></form></details>{% endif %}{% endfor %}
+{% for i in comp.inspections %}<p>{{ i.type }} <span class="badge">{{ i.result }}</span> {{ i.scheduled_local }}</p>{% endfor %}
+{% for pu in comp.punch %}<p>☐ {{ pu.description }} <span class="badge">{{ pu.status }}</span></p>{% endfor %}
+{% if actor.can("write:job") %}<details><summary>Add permit</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="permit"><label>Permit type</label><input name="permit_type" required><label>Jurisdiction (if confirmed)</label><input name="jurisdiction"><p><button type="submit">Add</button></p></form></details>{% endif %}
+<details><summary>Add punch item</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="punch"><input name="description" required><p><button type="submit">Add</button></p></form></details>
+<p class="muted">{{ comp.note }}</p>
+</section>
+
+<section class="card"><h2 style="margin-top:0">Files</h2>
+<ul class="list">{% for d in docs %}<li><div class="grow"><a href="/documents/{{ d.id }}/download">{{ d.title }}</a><div class="muted">{{ d.kind }} · r{{ d.revision }}{% if d.flags %} · {{ d.flags|join(", ") }}{% endif %}</div></div>{% if d.status != "stored" %}<span class="badge bad">{{ d.status }}</span>{% endif %}</li>{% else %}<li class="empty">No files.</li>{% endfor %}</ul>
+</section>
+
+{% if actor.can("write:job") and actor.can("read:financial") %}
+<details class="card"><summary>Job status</summary><form method="post" action="/jobs/{{ j.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="status">
+<select name="to_status">{% for s in ["active","on_hold","complete","closed","cancelled"] %}<option>{{ s }}</option>{% endfor %}</select><label>Reason</label><input name="reason"><p><button type="submit">Change status</button></p></form></details>
+{% endif %}
+{% endblock %}

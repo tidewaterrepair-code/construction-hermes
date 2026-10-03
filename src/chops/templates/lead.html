@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.customer.name }}{% endblock %}
+{% block content %}
+<h1>{{ lead.customer.name }} <span class="badge">{{ lead.status }}</span></h1>
+<p class="ref">{{ lead.ref }} · {{ lead.customer.ref }}</p>
+{% if lead.needs_review %}
+<div class="err">Needs a check{% if lead.possible_duplicate_of %}: possible duplicate of <a href="/leads/{{ lead.possible_duplicate_of|refid }}">{{ lead.possible_duplicate_of }}</a>{% endif %}.
+  <form method="post" action="/leads/{{ lead.id }}/action" style="margin-top:8px"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="reviewed"><button class="secondary" type="submit">Looks right — mark reviewed</button></form>
+</div>
+{% endif %}
+<section class="card">
+  <dl class="kv">
+    <dt>Phone</dt><dd>{% if lead.customer.phone %}<a href="tel:{{ lead.customer.phone }}">{{ lead.customer.phone }}</a>{% else %}—{% endif %}</dd>
+    <dt>Email</dt><dd>{{ lead.customer.email or "—" }}</dd>
+    <dt>Address</dt><dd>{{ lead.site.address if lead.site else "—" }}{% if lead.site and lead.site.city %}, {{ lead.site.city }}{% endif %}</dd>
+    <dt>Jurisdiction</dt><dd>{{ (lead.site.jurisdiction or "unconfirmed") if lead.site else "—" }}</dd>
+    <dt>Job type</dt><dd>{{ lead.job_type or "—" }}</dd>
+    <dt>Timing</dt><dd>{{ lead.timing or "—" }}</dd>
+    <dt>Budget</dt><dd>{{ lead.budget or "—" }}</dd>
+    <dt>Source</dt><dd>{{ lead.source }}</dd>
+    <dt>Next</dt><dd>{{ lead.next_action or "—" }} {{ lead.next_action_due|local if lead.next_action_due }}</dd>
+  </dl>
+  {% if lead.scope %}<p>{{ lead.scope }}</p>{% endif %}
+  {% if lead.missing_information %}<p class="muted">Missing: {{ lead.missing_information|join(", ") }}</p>{% endif %}
+  {% if lead.extraction %}<details><summary>Extraction details</summary><pre>{{ lead.extraction|tojson_pretty }}</pre></details>{% endif %}
+</section>
+
+<details class="card"><summary>Edit details</summary>
+<form method="post" action="/leads/{{ lead.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="update">
+  <label>Job type</label><input name="job_type" value="{{ lead.job_type or '' }}">
+  <label>Scope</label><textarea name="scope">{{ lead.scope or '' }}</textarea>
+  <div class="row"><div><label>Timing</label><input name="timing" value="{{ lead.timing or '' }}"></div><div><label>Budget</label><input name="budget" value="{{ lead.budget or '' }}"></div></div>
+  <div class="row"><div><label>Next action</label><input name="next_action" value="{{ lead.next_action or '' }}"></div><div><label>Due (local)</label><input name="next_action_due" type="datetime-local"></div></div>
+  <p><button type="submit">Save</button></p></form>
+</details>
+
+<details class="card"><summary>Move in pipeline</summary>
+<form method="post" action="/leads/{{ lead.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="move">
+  <label>To</label><select name="to_status">{% for s in allowed %}<option>{{ s }}</option>{% endfor %}</select>
+  <label>Reason (required for lost / reopen)</label><input name="reason">
+  <p><button type="submit">Move</button></p></form>
+</details>
+
+<details class="card"><summary>Site visit</summary>
+{% for a in appts %}<p>{{ a.starts_at_local }} <span class="badge {{ 'ok' if a.status == 'confirmed' else 'warn' }}">{{ a.status }}</span> <span class="ref">{{ a.ref }}</span></p>
+{% if a.status == "tentative" %}<form method="post" action="/leads/{{ lead.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="confirm"><input type="hidden" name="appointment" value="{{ a.ref|refid }}">
+<label>Confirmation evidence</label><input name="evidence" placeholder="e.g. customer texted yes 10/3 4pm" required><p><button class="secondary" type="submit">Mark confirmed</button></p></form>{% endif %}
+{% endfor %}
+<form method="post" action="/leads/{{ lead.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="visit">
+  <div class="row"><div><label>Start (local)</label><input name="starts_at" type="datetime-local" required></div><div><label>Minutes</label><input name="duration" type="number" value="60"></div></div>
+  <p><button type="submit">Book tentative visit</button></p></form>
+</details>
+
+<section class="card"><h2 style="margin-top:0">Follow-up questions (draft)</h2>
+{% if followup.questions %}<ol>{% for q in followup.questions %}<li>{{ q }}</li>{% endfor %}</ol>{% else %}<p class="muted">Nothing missing.</p>{% endif %}
+<p class="muted">{{ followup.note }}</p></section>
+
+<section class="card"><h2 style="margin-top:0">Estimates</h2>
+{% for e in estimates %}<p><a href="/estimates/{{ e.id }}">{{ e.title }}</a> · r{{ e.revision }} {{ e.revision_status }} · {{ e.totals.total|money if e.totals.total else "no price yet" }}</p>{% endfor %}
+<form method="post" action="/leads/{{ lead.id }}/action"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="estimate">
+  <label>Title</label><input name="title" value="{{ (lead.job_type or 'Job')|capitalize }} - {{ lead.customer.name }}">
+  <label>Pricing</label><select name="pricing_mode"><option value="turnkey">Turnkey (labor + materials)</option><option value="labor_only">Labor only</option></select>
+  <p><button type="submit">Start estimate</button></p></form>
+</section>
+
+<details class="card"><summary>History</summary>
+<ul class="list">{% for h in history %}<li><div class="grow">{{ h.from or "new" }} → {{ h.to }} <div class="muted">{{ h.at|local }} {{ h.reason or "" }}</div></div></li>{% endfor %}</ul></details>
+{% endblock %}

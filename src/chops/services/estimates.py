@@ -17,6 +17,7 @@ from ..models import ITEM_KINDS, PRICING_MODES, Assembly, Estimate, EstimateItem
 from ..money import D, pct
 from ..refs import ref
 from . import audit, rates, settings
+from . import settings as _settings
 
 POLICY_FIELDS = ("contingency_pct", "overhead_pct", "profit_method", "profit_pct", "discount_amount", "discount_pct",
                  "tax_mode", "material_tax_pct", "sales_tax_pct", "labor_burden_pct", "quote_type")
@@ -426,7 +427,7 @@ def view(session: Session, actor: Actor, estimate_id: int, revision_no: int | No
 def list_estimates(session: Session, actor: Actor, include_synthetic: bool = False, limit: int = 50) -> list[dict[str, Any]]:
     require(actor, "read:financial")
     q = select(Estimate).order_by(Estimate.id.desc()).limit(min(limit, 200))
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Estimate.is_synthetic.is_(False))
     out = []
     for e in session.scalars(q):

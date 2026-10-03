@@ -18,6 +18,7 @@ from ..models import RATE_CATEGORIES, RATE_STATUSES, Assembly, Rate
 from ..money import D
 from ..refs import ref
 from . import audit
+from . import settings as _settings
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "assemblies" / "templates.json"
 
@@ -91,7 +92,7 @@ def list_rates(session: Session, actor: Actor, category: str | None = None, incl
     q = select(Rate).where(Rate.active.is_(True)).order_by(Rate.code)
     if category:
         q = q.where(Rate.category == category)
-    if not include_synthetic:
+    if not _settings.include_synthetic(session, include_synthetic):
         q = q.where(Rate.is_synthetic.is_(False))
     return [rate_view(r) for r in session.scalars(q)]
 

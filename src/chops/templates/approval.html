@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ a.ref }}{% endblock %}
+{% block content %}
+<h1>{{ a.ref }} <span class="badge">{{ a.status }}</span></h1>
+<section class="card">
+  <p><strong>{{ a.summary }}</strong></p>
+  <dl class="kv">
+    <dt>Action</dt><dd>{{ a.action_type }}</dd>
+    <dt>To</dt><dd>{{ a.destination or "—" }}</dd>
+    <dt>Amount</dt><dd>{{ a.amount|money if a.amount else "—" }}</dd>
+    <dt>Record</dt><dd class="ref">{{ a.target }} · {{ a.target_revision }}</dd>
+    <dt>Requested via</dt><dd>{{ a.requested_via }}</dd>
+    <dt>Expires</dt><dd>{{ a.expires_local }}</dd>
+  </dl>
+</section>
+<h2>Exactly what will happen</h2>
+<section class="card">
+  <dl class="kv payload">
+  {% for k, v in a.payload.items() if not k.startswith("_") %}
+    <dt>{{ k }}</dt><dd style="text-align:left">{% if v is mapping or (v is iterable and v is not string) %}<pre>{{ v|tojson_pretty }}</pre>{% else %}{{ v }}{% endif %}</dd>
+  {% endfor %}
+  </dl>
+  <p class="muted">Fingerprint <span class="ref">{{ a.payload_hash[:16] }}</span>. Any change to the content, recipient, amount or revision voids this approval.</p>
+</section>
+{% if a.status == "pending" and actor.can("decide:approval") %}
+<form method="post" action="/approvals/{{ a.id }}/decide" class="card" data-confirm="Approve this exact action?">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="payload_hash" value="{{ a.payload_hash }}">
+  <input type="hidden" name="decision" value="approve">
+  <label for="n1">Note (optional)</label><input id="n1" name="note">
+  <p><button class="ok" type="submit" style="width:100%">Approve</button></p>
+</form>
+<form method="post" action="/approvals/{{ a.id }}/decide" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="payload_hash" value="{{ a.payload_hash }}">
+  <input type="hidden" name="decision" value="reject">
+  <label for="n2">Reason</label><input id="n2" name="note">
+  <p><button class="danger" type="submit" style="width:100%">Reject</button></p>
+</form>
+{% elif a.status == "pending" %}<p class="muted">Only the owner can decide.</p>{% endif %}
+{% if a.execution_result %}<h2>Result</h2><section class="card"><pre>{{ a.execution_result|tojson_pretty }}</pre></section>{% endif %}
+{% endblock %}
