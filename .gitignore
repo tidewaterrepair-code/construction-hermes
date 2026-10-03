@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+var/
+*.egg-info/
+.env
+.env.*
+!.env.example
+*.key
+/backups/
+.pytest_cache/
+hermes-home/

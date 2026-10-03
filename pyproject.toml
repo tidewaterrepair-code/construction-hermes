@@ -1,0 +1,43 @@
+[project]
+name = "construction-hermes"
+version = "0.1.0"
+description = "Construction operations service (business rules, approvals, dashboard, MCP tools) for a Hermes Agent coordinator"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "alembic>=1.13",
+  "pydantic>=2.7,<3",
+  "pydantic-settings>=2.3",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+  "argon2-cffi>=23.1",
+  "reportlab>=4.2",
+  # Matches the MCP SDK pinned by hermes-agent v2026.9.24 (pyproject extra "mcp").
+  "mcp==2.0.0",
+  "httpx>=0.27",
+  "cryptography>=42",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+chops = "chops.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+chops = ["templates/*.html", "static/*", "migrations/*.py", "migrations/*.ini", "migrations/versions/*.py", "assemblies/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
