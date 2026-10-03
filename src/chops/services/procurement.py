@@ -27,8 +27,11 @@ def add_vendor(session: Session, actor: Actor, *, name: str, kind: str = "vendor
     require(actor, "write:procurement")
     if kind not in ("vendor", "subcontractor"):
         raise ValidationFailed("kind must be vendor or subcontractor")
+    from . import settings as _settings
+
     c = Contact(kind=kind, name=name, company=company, email=email, email_normalized=leads.normalize_email(email),
-                phone=phone, phone_normalized=leads.normalize_phone(phone), trade=trade, created_by_id=actor.user_id)
+                phone=phone, phone_normalized=leads.normalize_phone(phone), trade=trade, created_by_id=actor.user_id,
+                is_synthetic=_settings.environment(session) != "prod")
     session.add(c)
     session.flush()
     audit.record(session, actor, "vendor.add", "contact", c.id, kind=kind)

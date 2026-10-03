@@ -118,6 +118,10 @@ def capture(
     require(actor, "write:crm")
     if not name or not name.strip():
         raise ValidationFailed("customer name is required (use 'Unknown' explicitly if not provided)")
+    from . import settings as _settings
+
+    # In a demo/restore-test database every new record is synthetic, whatever the caller says.
+    synthetic = synthetic or _settings.environment(session) != "prod"
 
     event: IntegrationEvent | None = None
     if provider_event_id:

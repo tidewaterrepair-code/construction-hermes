@@ -52,6 +52,9 @@ def create(session: Session, actor: Actor, *, code: str, description: str, categ
     cost = D(unit_cost)
     if cost < 0:
         raise ValidationFailed("unit cost cannot be negative")
+    from . import settings as _settings
+
+    synthetic = synthetic or _settings.environment(session) != "prod"
     sd = source_date if isinstance(source_date, dt.date) else dt.date.fromisoformat(source_date)
     vu = valid_until if (valid_until is None or isinstance(valid_until, dt.date)) else dt.date.fromisoformat(valid_until)
     prev = session.scalar(select(Rate).where(Rate.code == code, Rate.active.is_(True), Rate.is_synthetic.is_(synthetic)))
