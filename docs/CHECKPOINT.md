@@ -25,10 +25,10 @@
 8. Off-server backup destination; a safe place for the backup key.
 9. Private access method (Tailscale recommended) and whether email (SMTP) should be connected.
 
-## Exact next commands (on the VPS)
+## Exact next command (on the VPS)
 ```bash
-docker compose ls && docker ps && ss -ltnp          # record existing workloads first
-sudo git clone -b claude/quirky-ramanujan-gdlehh https://github.com/tidewaterrepair-code/construction-hermes /opt/construction-hermes
-cd /opt/construction-hermes/deploy && cp ../.env.example .env && cp hermes.env.example hermes.env && chmod 600 .env hermes.env
-# fill secrets, create /etc/construction-hermes/backup.key, then follow docs/RUNBOOK.md "First deployment"
+curl -fsSL https://raw.githubusercontent.com/tidewaterrepair-code/construction-hermes/HEAD/install.sh | sudo bash
 ```
+Installer verified in the build container (fresh install, re-run/upgrade, unattended model path);
+not yet run on the VPS. In the build container the image used `INSTALL_PG_CLIENT=0`, so the
+first-backup step could not run there; on a normal network the image includes pg_dump.

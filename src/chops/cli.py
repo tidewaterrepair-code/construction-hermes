@@ -36,6 +36,15 @@ def cmd_bootstrap_owner(args) -> None:
     from .db import session_scope
     from .services import integrations, rates, users
 
+    if args.if_missing:
+        from sqlalchemy import func, select
+
+        from .models import User
+
+        with session_scope() as s:
+            if s.scalar(select(func.count()).select_from(User).where(User.role == "owner")):
+                print("owner already exists; nothing to do")
+                return
     pw = os.environ.get("CHOPS_OWNER_PASSWORD") or getpass.getpass("Owner password (min 12 chars): ")
     with session_scope() as s:
         u = users.create_user(s, None, username=args.username, display_name=args.display_name, role="owner",
@@ -43,6 +52,26 @@ def cmd_bootstrap_owner(args) -> None:
         integrations.ensure_rows(s)
         n = rates.load_example_assemblies(s)
         print(f"owner {u.username} created (USR-{u.id}); {n} example assemblies loaded")
+
+
+def cmd_set(args) -> None:
+    from .db import session_scope
+    from .services import settings
+
+    try:
+        value = json.loads(args.value)
+    except json.JSONDecodeError:
+        value = args.value
+    with session_scope() as s:
+        owner = _cli_owner(s)
+        if args.key == "channel_approvals":
+            settings.require(owner, "admin:settings")
+            settings._write(s, owner, "channel_approvals", bool(value))
+        elif args.key == "mode":
+            settings.set_mode(s, owner, str(value))
+        else:
+            settings.put(s, owner, args.key, value)
+    print(f"{args.key} set")
 
 
 def cmd_issue_agent_token(args) -> None:
@@ -209,7 +238,12 @@ def main(argv: list[str] | None = None) -> None:
     b = sub.add_parser("bootstrap-owner")
     b.add_argument("--username", default="jimmy")
     b.add_argument("--display-name", default="Jimmy Blackwell")
+    b.add_argument("--if-missing", action="store_true", help="do nothing if an owner already exists")
     b.set_defaults(fn=cmd_bootstrap_owner)
+    st = sub.add_parser("set", help="set a business setting as the owner (value: JSON or plain text)")
+    st.add_argument("key")
+    st.add_argument("value")
+    st.set_defaults(fn=cmd_set)
     t = sub.add_parser("issue-agent-token")
     t.add_argument("--username", default="hermes")
     t.add_argument("--name", default="hermes-gateway")

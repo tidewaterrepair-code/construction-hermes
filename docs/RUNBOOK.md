@@ -3,7 +3,15 @@
 All commands run on the VPS as an admin (deployment privileges are separate from the running
 agent: Hermes has no Docker socket, shell or host mounts).
 
-## First deployment
+## First deployment (one command)
+```bash
+curl -fsSL https://raw.githubusercontent.com/tidewaterrepair-code/construction-hermes/HEAD/install.sh | sudo bash
+```
+`install.sh` does everything below plus onboarding, verification and a summary
+(`/root/construction-hermes-install.txt`; log `/var/log/construction-hermes-install.log`).
+Unattended: set `CH_NONINTERACTIVE=1` and the `CH_*` variables listed at the top of `install.sh`.
+
+## First deployment (manual alternative)
 ```bash
 sudo mkdir -p /opt/construction-hermes /etc/construction-hermes /var/backups/construction-hermes
 sudo git clone https://github.com/tidewaterrepair-code/construction-hermes /opt/construction-hermes

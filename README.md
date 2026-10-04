@@ -14,6 +14,27 @@ Status: **BLOCKED for deployment** (no VPS access from the build session; no mod
 The software is built, tested, and ready to commission in **SHADOW** once those exist. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) and [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md).
 
+## Install on your VPS (one command)
+
+SSH into the server and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tidewaterrepair-code/construction-hermes/HEAD/install.sh | sudo bash
+```
+
+It checks the server, asks a few questions (your login, company name, Telegram, phone access,
+AI usage cap), installs Docker if missing, builds and starts everything in its own isolated
+Docker project, connects Hermes to the construction tools, walks you through picking an AI
+model, sets up nightly encrypted backups, starts in **SHADOW** mode (nothing is sent), and prints
+a summary. Have ready (optional, can be added later by re-running):
+
+- an AI provider API key (Anthropic, OpenRouter, ...) — a Claude.ai/ChatGPT subscription is not an API key
+- a Telegram bot token from @BotFather and your numeric user ID from @userinfobot
+- a free Tailscale account if you want to open the dashboard from your phone
+
+Re-running the same command upgrades the install and keeps your data and settings. It never
+touches other containers, SSH or firewall settings, and opens no public ports.
+
 ## What it does
 
 | Area | Highlights |
