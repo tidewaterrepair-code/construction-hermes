@@ -34,6 +34,7 @@ main() {
   REF="${CH_REF:-}"
   DIR="${CH_DIR:-/opt/construction-hermes}"
   PROJECT="construction-hermes"
+  DCMD=(docker compose -p "$PROJECT" --project-directory "$DIR/deploy" -f "$DIR/deploy/docker-compose.yml")
   ETC="/etc/construction-hermes"
   BACKUP_DIR="/var/backups/construction-hermes"
   WEB_PORT="${CH_WEB_PORT:-8640}"
@@ -89,8 +90,39 @@ ok() { echo "  ${c_grn}✓${c_off} $*"; echo "  ok: $*" >>"$LOG"; }
 warn() { echo "  ${c_ylw}!${c_off} $*"; echo "  warn: $*" >>"$LOG"; WARNINGS+=("$*"); }
 fail() { echo; echo "${c_red}✗ $*${c_off}" >&2; echo "Re-run the same command after fixing the problem; it is safe to repeat." >&2; exit 1; }
 run() { echo "  \$ $*" >>"$LOG"; "$@" >>"$LOG" 2>&1; }
-compose() { (cd "$DIR/deploy" && docker compose -p "$PROJECT" "$@"); }
-cexec() { compose exec -T "$@"; }
+compose() { "${DCMD[@]}" "$@"; }
+# Non-interactive command inside a container: never reads the keyboard, always time-limited.
+cexec() { timeout -k 10 "${CEXEC_TIMEOUT:-180}" "${DCMD[@]}" exec -T "$@" </dev/null; }
+# waitfor SECONDS "what" command...  Run a background step with a hard time limit, keyboard
+# detached, output to the log (or $WAITFOR_OUT), and a progress line every 20s so the screen
+# is never silent. Returns the command's status (124 = time limit reached).
+waitfor() {
+  local secs="$1" what="$2" dest="${WAITFOR_OUT:-$LOG}"; shift 2
+  echo "  \$ $* (limit ${secs}s)" >>"$LOG"
+  timeout -k 10 "$secs" "$@" </dev/null >>"$dest" 2>&1 &
+  local pid=$! t=0 rc=0
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1; t=$((t + 1))
+    if [ $((t % 20)) -eq 0 ]; then echo "    ...still ${what} (${t}s; limit ${secs}s)"; fi
+  done
+  wait "$pid" || rc=$?
+  if [ "$dest" != "$LOG" ]; then cat "$dest" >>"$LOG"; fi
+  if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then echo "    ${c_ylw}stopped after ${secs}s: ${what} took too long${c_off}"; fi
+  return "$rc"
+}
+# Show what Hermes is doing (and save it to the log) when something stalls.
+diag_hermes() {
+  local tmp; tmp="$(mktemp)"
+  {
+    echo "--- containers"; timeout 20 "${DCMD[@]}" ps -a
+    echo "--- last Hermes log lines"; timeout 20 "${DCMD[@]}" logs --no-color --tail 60 hermes
+    echo "--- processes inside Hermes"; timeout 20 "${DCMD[@]}" exec -T hermes ps -eo pid,etime,args </dev/null
+  } >"$tmp" 2>&1 || true
+  echo "--- diagnostics" >>"$LOG"; cat "$tmp" >>"$LOG"
+  echo "  Diagnostics (full copy in $LOG):"
+  tail -n 30 "$tmp" | cut -c1-160 | sed 's/^/      /'
+  rm -f "$tmp"
+}
 
 ask() {  # ask VAR "Question" "default"
   local __var="$1" __q="$2" __def="${3:-}" __ans
@@ -324,11 +356,14 @@ write_secrets() {
 build_and_start() {
   step "Building and starting the services (first run takes several minutes)"
   # shellcheck disable=SC2086
-  (cd "$DIR" && docker build ${CH_DOCKER_BUILD_FLAGS:-} -f deploy/Dockerfile -t construction-hermes/chops:0.1.0 . >>"$LOG" 2>&1) \
-    || fail "image build failed (see $LOG)"
+  # shellcheck disable=SC2086
+  waitfor 2700 "building the service image" docker build ${CH_DOCKER_BUILD_FLAGS:-} -f "$DIR/deploy/Dockerfile" \
+    -t construction-hermes/chops:0.1.0 "$DIR" || fail "image build failed (see $LOG)"
   ok "Service image built"
-  run compose pull db hermes || warn "could not pull db/hermes images now; will retry on start"
-  run compose up -d --no-build db migrate web mcp worker || fail "services failed to start (see $LOG)"
+  waitfor 2700 "downloading the database and Hermes images (about 5 GB the first time)" "${DCMD[@]}" pull db hermes \
+    || warn "could not pull db/hermes images now; will retry on start"
+  waitfor 600 "starting the database, dashboard, tool server and worker" "${DCMD[@]}" up -d --no-build db migrate web mcp worker \
+    || fail "services failed to start (see $LOG)"
   local i
   for i in $(seq 1 60); do
     if curl -fsS "http://127.0.0.1:${WEB_PORT}/healthz" >/dev/null 2>&1; then break; fi
@@ -363,31 +398,57 @@ onboard_service() {
 
 connect_hermes() {
   step "Connecting Hermes Agent to the construction tools"
-  local henv="$DIR/deploy/hermes.env" out attempt
-  run compose up -d --no-build hermes-init || true
+  local henv="$DIR/deploy/hermes.env" out attempt tmp
+  tmp="$(mktemp)"
+  waitfor 180 "preparing Hermes' configuration" "${DCMD[@]}" up -d --no-build hermes-init \
+    || warn "Hermes config step did not finish (continuing)"
+  HERMES_LINK_OK=0
+  out=""
   for attempt in 1 2; do
-    if [ -z "$(envget "$henv" CHOPS_MCP_TOKEN)" ] || [ "$attempt" = 2 ]; then
+    # A new token only when there is none, or the tool server rejected the current one.
+    if [ -z "$(envget "$henv" CHOPS_MCP_TOKEN)" ] || { [ "$attempt" = 2 ] && echo "$out" | grep -qiE "401|unauthori[sz]ed|invalid or revoked|forbidden"; }; then
       local tok
       tok="$(cexec web chops issue-agent-token --revoke-existing 2>>"$LOG" | { grep -E '^chops_' || true; } | tail -1)"
       [ -n "$tok" ] || fail "could not issue the Hermes service token"
       envset "$henv" CHOPS_MCP_TOKEN "$tok"
       ok "Service token issued for Hermes (stored only in hermes.env)"
     fi
-    run compose up -d --no-build --force-recreate hermes || fail "Hermes failed to start (see $LOG)"
+    echo "  Restarting Hermes (up to 3 minutes)..."
+    local rc=0
+    # --no-deps: the database and tool server are already running; only Hermes is replaced.
+    waitfor 180 "restarting Hermes" "${DCMD[@]}" up -d --no-build --no-deps --force-recreate hermes || rc=$?
+    if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then
+      warn "Hermes did not restart within 3 minutes"; out=""; continue
+    elif [ "$rc" != 0 ]; then
+      warn "Hermes restart failed (exit $rc; details in $LOG)"; out=""; continue
+    fi
     sleep 5
-    out="$(cexec hermes hermes mcp test construction 2>&1 || true)"; echo "$out" >>"$LOG"
-    if echo "$out" | grep -q "Tools discovered"; then break; fi
+    echo "  Checking Hermes can reach the construction tools (up to 2 minutes)..."
+    : >"$tmp"
+    WAITFOR_OUT="$tmp" waitfor 120 "checking the connection" \
+      "${DCMD[@]}" exec -T hermes timeout -k 5 100 hermes mcp test construction || true
+    out="$(cat "$tmp")"
+    if echo "$out" | grep -q "Tools discovered"; then HERMES_LINK_OK=1; break; fi
   done
-  if echo "$out" | grep -q "Tools discovered"; then
+  if [ "$HERMES_LINK_OK" = 1 ]; then
     ok "Hermes reaches the construction tools ($(echo "$out" | sed -n 's/.*Tools discovered: \([0-9]*\).*/\1/p') tools)"
   else
-    fail "Hermes could not reach the construction tools (see $LOG)"
+    warn "could not confirm that Hermes reaches the construction tools; the rest of the install continues"
+    diag_hermes
+    MISSING+=("Hermes connection: send the 'Diagnostics' lines above (also in $LOG) for help, then re-run the installer")
+    rm -f "$tmp"; return
   fi
-  out="$(cexec hermes hermes tools list --platform telegram 2>&1 || true)"; echo "$out" >>"$LOG"
+  : >"$tmp"
+  WAITFOR_OUT="$tmp" waitfor 90 "running the safety check" \
+    "${DCMD[@]}" exec -T hermes timeout -k 5 75 hermes tools list --platform telegram || true
+  out="$(cat "$tmp")"; rm -f "$tmp"
   if echo "$out" | grep -qE "✓ enabled +(terminal|file|browser|code_execution|web) "; then
     fail "safety check failed: Hermes has shell/file/browser/web tools enabled"
+  elif echo "$out" | grep -q "Built-in toolsets"; then
+    ok "Safety check: Hermes has no shell, file, browser, web or code tools"
+  else
+    warn "safety check could not run (Hermes did not answer in time); re-run the installer later"
   fi
-  ok "Safety check: Hermes has no shell, file, browser, web or code tools"
 }
 
 chatgpt_signin() {
@@ -412,7 +473,7 @@ CNF' >>"$LOG" 2>&1 || true
       if (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec -e OPENSSL_CONF=/opt/data/openssl-classic.cnf hermes hermes auth add openai-codex --type oauth); then
         # The same network will need it for model calls too.
         envset "$DIR/deploy/hermes.env" OPENSSL_CONF /opt/data/openssl-classic.cnf
-        run compose up -d --no-build --force-recreate hermes
+        waitfor 180 "restarting Hermes" "${DCMD[@]}" up -d --no-build --no-deps --force-recreate hermes || warn "Hermes restart took too long"
         ok "Signed in using the compatible TLS setting (kept for Hermes)"
       else
         warn "ChatGPT sign-in did not finish"
@@ -432,7 +493,7 @@ CNF' >>"$LOG" 2>&1 || true
   if [ "$prov" != "openai-codex" ]; then
     warn "the selected provider is '${prov:-none}', not the ChatGPT subscription (openai-codex); re-run to change it"
   fi
-  run compose restart hermes
+  waitfor 180 "restarting Hermes" "${DCMD[@]}" restart hermes || warn "Hermes restart took too long"
 }
 
 model_configured() {
@@ -455,7 +516,7 @@ setup_ai_model() {
     envset "$DIR/deploy/hermes.env" "$var" "$CH_MODEL_API_KEY"
     run cexec hermes hermes config set model.provider "$CH_MODEL_PROVIDER"
     run cexec hermes hermes config set model.default "$CH_MODEL"
-    run compose up -d --no-build --force-recreate hermes
+    waitfor 180 "restarting Hermes" "${DCMD[@]}" up -d --no-build --no-deps --force-recreate hermes || warn "Hermes restart took too long"
     ok "Model set: $CH_MODEL_PROVIDER / $CH_MODEL"
   elif [ "${CH_MODEL_PROVIDER:-}" = "openai-codex" ] && [ "$INTERACTIVE" != "1" ]; then
     warn "ChatGPT sign-in needs you to enter a code; run the installer interactively (or the command in the summary)"
@@ -470,7 +531,7 @@ setup_ai_model() {
       2)
         echo "  Hermes will show its own picker: choose a provider, sign in or paste a key, then pick a model."
         (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec hermes hermes model) || warn "model setup did not finish"
-        run compose restart hermes
+        waitfor 180 "restarting Hermes" "${DCMD[@]}" restart hermes || warn "Hermes restart took too long"
         ;;
       *) : ;;
     esac
@@ -538,7 +599,7 @@ setup_access() {
       if tailscale serve --bg --https="$https_port" "http://127.0.0.1:${WEB_PORT}" >>"$LOG" 2>&1; then
         envset "$env" CHOPS_BASE_URL "https://${name}${suffix}"
         envset "$env" CHOPS_COOKIE_SECURE true
-        run compose up -d --no-build web mcp worker
+        waitfor 300 "applying the access settings" "${DCMD[@]}" up -d --no-build web mcp worker || warn "services took too long to restart"
         DASH_URL="https://${name}${suffix}"
         ok "Dashboard on your private Tailscale network: $DASH_URL"
       else
@@ -553,7 +614,7 @@ setup_access() {
   if [ "$ACCESS" = "ssh" ]; then
     envset "$env" CHOPS_BASE_URL "http://127.0.0.1:${WEB_PORT}"
     envset "$env" CHOPS_COOKIE_SECURE false
-    run compose up -d --no-build web mcp worker
+    waitfor 300 "applying the access settings" "${DCMD[@]}" up -d --no-build web mcp worker || warn "services took too long to restart"
     DASH_URL="http://127.0.0.1:${WEB_PORT}  (via SSH tunnel: ssh -L ${WEB_PORT}:127.0.0.1:${WEB_PORT} <user>@<server>)"
     ok "Dashboard reachable through an SSH tunnel (nothing exposed publicly)"
   fi
@@ -580,10 +641,10 @@ setup_systemd() {
 
 first_backup() {
   step "First backup and restore check"
-  if run compose --profile ops run --rm backup; then
+  if waitfor 1200 "creating the encrypted backup" "${DCMD[@]}" --profile ops run --rm backup; then
     local latest
     latest="$(ls -1t "$BACKUP_DIR"/chops-*.tar.enc 2>/dev/null | head -1 || true)"
-    if [ -n "$latest" ] && run compose --profile ops run --rm restore-test "/backups/$(basename "$latest")"; then
+    if [ -n "$latest" ] && waitfor 1200 "verifying the backup by restoring it" "${DCMD[@]}" --profile ops run --rm restore-test "/backups/$(basename "$latest")"; then
       ok "Encrypted backup created and verified by restoring it into a throwaway database"
     else
       warn "backup was created but the restore check failed (see $LOG)"
