@@ -238,7 +238,8 @@ def test_routines_send_nothing_when_nothing_changed(session, owner, fresh_db):
     r = session.get(Routine, "morning_priorities")
     r.enabled = True
     session.commit()
-    ran = worker.run_routines(timeutil.now().replace(hour=23, minute=59))
+    # A Tuesday evening (the morning routine runs Mon-Sat), independent of today's date.
+    ran = worker.run_routines(dt.datetime(2026, 10, 6, 23, 59, tzinfo=dt.timezone.utc))
     session.expire_all()
     r = session.get(Routine, "morning_priorities")
     assert ran == [] and "nothing new" in (r.last_result or "")
