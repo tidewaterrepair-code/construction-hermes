@@ -42,6 +42,20 @@ sudo systemctl enable --now construction-hermes.service construction-hermes-back
 `docker compose -p construction-hermes exec web chops health` (JSON; exit 1 on failure),
 `GET /healthz`, dashboard → More → System (integrations, outbound queue, routines, audit).
 
+## "Hermes is shutting down" in Telegram
+Hermes sends that notice whenever its gateway stops while it is working on a message. Find out
+why (read-only): `sudo bash /opt/construction-hermes/deploy/scripts/why-hermes-stopped.sh`.
+It shows Docker's stop/start times, Hermes' own shutdown records and the usage-guard history,
+then names the cause:
+- **Same bot used by another program** (OpenClaw, another Hermes): Telegram allows one reader
+  per bot, so Hermes gives up after ~3 minutes of conflicts and shuts down. Make a separate bot
+  with @BotFather and put its token in `deploy/hermes.env`, then `up -d --force-recreate hermes`.
+- **Usage guard** passed the monthly cap: the owner gets a Telegram message first; raise
+  `CHOPS_MONTHLY_TOKEN_CAP` in `/etc/construction-hermes/usage-guard.env`, start Hermes, release
+  the kill switch.
+- **Stopped from outside** (installer re-run, `docker compose restart`, reboot): harmless; send
+  any message once it is back.
+
 ## Backups and restore
 - Nightly timer: encrypted archive (AES-256-GCM, chunked) of DB + documents, retention
   `CHOPS_BACKUP_KEEP` (default 14), then an automatic restore test into a temporary database

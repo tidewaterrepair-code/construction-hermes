@@ -14,9 +14,11 @@
   transcription, weather, off-server backup. Manual entry, uploads and CSV import/export work.
 - **Chat approvals** rely on Hermes routing MCP elicitation to its human approval prompt and on
   the Telegram allowlist containing only the owner. Contract-tested, not live-tested; off by default.
-- **Usage cap** is a local month-to-date *token* cap read from `hermes insights` (text parsing)
-  and enforced by stopping the Hermes container. It is not a billing guarantee; also set a hard
-  limit at the provider. Cost data may show "unknown" for some providers.
+- **Usage cap** is a local month-to-date *token* cap (new input + output tokens; prompt-cache
+  re-reads are not counted) read from `hermes insights` (text parsing) and enforced by telling the
+  owner on Telegram, then stopping the Hermes container. It is not a billing guarantee; also set a
+  hard limit at the provider. With ChatGPT sign-in there is no per-token bill (the plan's own
+  limits apply). Cost data may show "unknown" for some providers.
 - **Assemblies are examples**, not local pricing or engineered designs. No rates are loaded in
   production; synthetic demo rates exist only in demo databases.
 - **Tax** treatment is owner-selected per estimate (`tax_mode`); the system does not determine

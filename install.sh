@@ -156,6 +156,32 @@ envset() {  # envset FILE KEY VALUE  (replace or append, keep mode 600)
   mv "$tmp" "$f"; chmod 600 "$f"
 }
 envget() { [ -f "$1" ] && sed -n "s/^$2=//p" "$1" | tail -1 || true; }
+# tg_call TOKEN METHOD  -> prints the response body, then the HTTP status on the last line.
+# The token travels in curl's stdin config, never on the command line.
+tg_call() { printf 'url = "https://api.telegram.org/bot%s/%s"\n' "$1" "$2" | curl -sS -m 15 -K - -w '\n%{http_code}' 2>/dev/null || true; }
+# tg_check TOKEN: 0 = usable (or Telegram unreachable, so it cannot be checked); 1 = rejected or in use.
+tg_check() {
+  local t="$1" r code name
+  if ! [[ "$t" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]]; then
+    echo "  ${c_ylw}That does not look like a bot token (it looks like 123456789:AA... from @BotFather).${c_off}"; return 1
+  fi
+  r="$(tg_call "$t" getMe)"; code="$(printf '%s' "$r" | tail -1)"
+  case "$code" in
+    200) name="$(printf '%s' "$r" | sed '$d' | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["username"])' 2>/dev/null || true)"
+         ok "Telegram bot found: @${name:-?}" ;;
+    401|404) echo "  ${c_ylw}Telegram rejected this token (mistyped or revoked). Copy it again from @BotFather.${c_off}"; return 1 ;;
+    *) warn "could not reach Telegram to check the bot token; continuing"; return 0 ;;
+  esac
+  # A read without an offset does not mark messages as read. 409 = someone else is reading this bot.
+  r="$(tg_call "$t" 'getUpdates?timeout=0&limit=1')"; code="$(printf '%s' "$r" | tail -1)"
+  if [ "$code" = 409 ]; then
+    echo "  ${c_ylw}Another program is already using this bot (for example OpenClaw or another Hermes),"
+    echo "  or it has a webhook set. Two programs cannot share one bot: Hermes would keep shutting down."
+    echo "  In @BotFather send /newbot to make a separate bot for Construction Hermes.${c_off}"
+    return 1
+  fi
+  return 0
+}
 
 # ====================================================================== 1. preflight
 preflight() {
@@ -226,8 +252,17 @@ ask_questions() {
   if [ -z "$(envget "$DIR/deploy/hermes.env" TELEGRAM_BOT_TOKEN)" ]; then
     echo
     echo "  ${c_dim}Telegram lets you text Hermes from your phone. You need a bot token from @BotFather"
-    echo "  (send /newbot) and your numeric user ID from @userinfobot. Leave blank to skip for now.${c_off}"
-    ask TELEGRAM_BOT_TOKEN "Telegram bot token" "${CH_TELEGRAM_BOT_TOKEN:-}"
+    echo "  (send /newbot) and your numeric user ID from @userinfobot. Leave blank to skip for now."
+    echo "  Use a NEW bot made just for Construction Hermes: a bot that OpenClaw or another agent"
+    echo "  already uses cannot be shared (Telegram lets only one program read a bot).${c_off}"
+    while :; do
+      ask TELEGRAM_BOT_TOKEN "Telegram bot token" "${CH_TELEGRAM_BOT_TOKEN:-}"
+      [ -n "$TELEGRAM_BOT_TOKEN" ] || break
+      tg_check "$TELEGRAM_BOT_TOKEN" && break
+      [ "$INTERACTIVE" = "1" ] || fail "Telegram bot token check failed (see above)"
+      TELEGRAM_BOT_TOKEN=""; CH_TELEGRAM_BOT_TOKEN=""
+      echo "  Enter a different token, or press Enter to skip Telegram for now."
+    done
     if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
       ask TELEGRAM_USER_ID "Your numeric Telegram user ID" "${CH_TELEGRAM_USER_ID:-}"
       [[ "$TELEGRAM_USER_ID" =~ ^[0-9]+$ ]] || fail "Telegram user ID must be digits only (from @userinfobot), not a @username"
@@ -672,6 +707,17 @@ verify() {
     if [ "$before" = "$after" ]; then ok "Your other containers are still running ($(printf '%s' "$before" | { grep -c . || true; }))"
     else warn "the set of other running containers changed during install; please check them: docker ps"; fi
   fi
+  if [ -n "$(envget "$DIR/deploy/hermes.env" TELEGRAM_BOT_TOKEN)" ]; then
+    local tglog
+    tglog="$(timeout 30 "${DCMD[@]}" logs --no-color hermes 2>&1 | { grep -E 'polling conflict|Telegram polling could not recover|telegram_auth_error' || true; } | tail -3)"
+    if printf '%s' "$tglog" | grep -q 'telegram_auth_error'; then
+      warn "Telegram rejected the bot token. Fix TELEGRAM_BOT_TOKEN in $DIR/deploy/hermes.env (from @BotFather), then: docker compose -p $PROJECT up -d --force-recreate hermes"
+    elif [ -n "$tglog" ]; then
+      warn "another program (OpenClaw or another Hermes?) is using the same Telegram bot, so Hermes will keep shutting down. Make a new bot with @BotFather (/newbot), put its token in $DIR/deploy/hermes.env as TELEGRAM_BOT_TOKEN, then: docker compose -p $PROJECT up -d --force-recreate hermes"
+    else
+      ok "Telegram: no bot conflicts reported by Hermes"
+    fi
+  fi
 }
 
 summary() {
@@ -701,6 +747,7 @@ with session_scope() as s: print(settings.get(s,"company_name") or "")' 2>/dev/n
     echo "  Health:      docker compose -p $PROJECT exec web chops health"
     echo "  Logs:        docker compose -p $PROJECT logs -f --tail 100 hermes web worker"
     echo "  Kill switch: docker compose -p $PROJECT exec web chops kill-switch on --reason \"...\""
+    echo "  Why did Hermes stop/restart?: sudo bash $DIR/deploy/scripts/why-hermes-stopped.sh"
     echo "  AI plan usage (ChatGPT 5-hour/weekly limits): docker compose -p $PROJECT exec hermes hermes usage"
     echo "  Re-do ChatGPT sign-in: docker compose -p $PROJECT exec hermes hermes auth add openai-codex --type oauth"
     echo "  Upgrade / change answers: run the same install command again"

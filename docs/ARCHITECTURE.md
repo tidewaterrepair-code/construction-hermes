@@ -41,5 +41,5 @@ procurement, job costing, documents, owner reporting) are **skills**, not separa
 | Telegram channel | Gateway + `TELEGRAM_ALLOWED_USERS` | `deploy/hermes.env` | docs `messaging/telegram.md` | Configured; blocked on bot token |
 | Scheduling | `cronjob` toolset | Not used (disabled): routines run in `chops.worker` with durable state and catch-up | tests | Implemented in service |
 | Memory | built-in memory (char-limited) | small limits | config | Configured |
-| Spend cap | none native (provider-side only) | host `usage-guard.sh` (token cap → stop Hermes + kill switch) | script parse test | Implemented; not live-verified |
+| Spend cap | none native (provider-side only) | host `usage-guard.sh` (token cap → Telegram notice to owner, stop Hermes + kill switch) | `tests/test_usage_guard.py` (fake docker/curl; real `hermes insights` format checked against v2026.9.24) | Implemented; not live-verified |
 | Model provider | many providers incl. ChatGPT sign-in (`openai-codex`, device code) | installer option 1 (default) | `hermes auth add openai-codex` starts the device flow in v2026.9.24 | **Blocked: owner must sign in** |
