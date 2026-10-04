@@ -480,14 +480,23 @@ setup_ai_model() {
     local test="${CH_AI_TEST:-}"
     if [ -z "$test" ]; then if yesno "Test it now with one short request? (uses a few cents of tokens at most)" y; then test=yes; else test=no; fi; fi
     if [ "$test" = "yes" ]; then
-      local reply rc=0
-      echo "  (waiting for the AI provider; up to 4 minutes)"
-      reply="$(timeout 240 bash -c "cd '$DIR/deploy' && docker compose -p '$PROJECT' exec -T hermes hermes chat -q 'Call the whats_next tool and reply with its text only, nothing else.'" 2>&1)" || rc=$?
+      local reply rc=0 out
+      out="$(mktemp)"
+      echo "  Asking Hermes (gives up after 2 minutes; you'll see its answer below)..."
+      # No keyboard input (it can't sit waiting on a hidden question), answer-and-exit mode,
+      # a time limit enforced inside the container, and a wall-clock budget for the AI call.
+      (cd "$DIR/deploy" && timeout -k 15 170 docker compose -p "$PROJECT" exec -T hermes \
+          timeout -k 10 150 hermes chat -Q --oneshot --max-turns 4 --run-budget 120 \
+          -q 'Call the whats_next tool and reply with its text only, nothing else.' </dev/null 2>&1) \
+        | tee "$out" | sed -u 's/^/      /' || rc=$?
+      reply="$(cat "$out")"; rm -f "$out"
       echo "$reply" >>"$LOG"
-      if [ "$rc" != 0 ] || echo "$reply" | grep -qiE "Provider said|error|invalid|unauthori[sz]ed|No authenticated|temporarily unavailable"; then
-        warn "AI test failed: check the API key and model, and that this server can reach the provider (details in $LOG)"; AI_READY=0
+      if [ "$rc" != 0 ] || [ -z "$(printf '%s' "$reply" | tr -d '[:space:]')" ] \
+         || echo "$reply" | grep -qiE "Provider said|error|invalid|unauthori[sz]ed|No authenticated|temporarily unavailable|re-auth|sign in again"; then
+        warn "AI test did not finish: the model may be slow or unreachable, or sign-in may need redoing. Hermes is installed; try a message later (details in $LOG)"
+        AI_READY=0
       else
-        ok "Hermes answered:"; echo "$reply" | grep -vE '^\s*$|Resume this session|hermes --resume|hermes -c|^Session:|^Title:|^Duration:|^Messages:' | tail -10 | sed 's/^/      /' || true
+        ok "Hermes answered (above)"
       fi
     fi
   else
