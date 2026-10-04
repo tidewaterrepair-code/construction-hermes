@@ -1,6 +1,10 @@
 # Known limitations
 
-- **No model provider configured.** Hermes cannot converse until an API key and model are set.
+- **ChatGPT sign-in** works through Hermes' `openai-codex` provider. Hermes' docs do not say which
+  ChatGPT plans qualify or how Hermes usage counts against plan limits; watch `hermes usage`. If a
+  token refresh is permanently rejected, Hermes asks you to sign in again (re-run the installer or
+  the `hermes auth add openai-codex` command).
+- **No model provider configured.** Hermes cannot converse until you sign in (ChatGPT) or add an API key, and pick a model.
   Natural-language extraction quality (leads from texts, daily logs from notes) is therefore
   untested; the tools accept per-field confidence and flag uncertain fields for review.
 - **Not deployed to the VPS.** Everything was built and verified in an ephemeral build

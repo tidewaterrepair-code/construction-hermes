@@ -21,7 +21,8 @@
 #   CH_OWNER_USERNAME, CH_OWNER_NAME, CH_OWNER_PASSWORD, CH_COMPANY_NAME,
 #   CH_TELEGRAM_BOT_TOKEN, CH_TELEGRAM_USER_ID, CH_CHAT_APPROVALS=yes|no,
 #   CH_ACCESS=tailscale|ssh, CH_TS_AUTHKEY, CH_TOKEN_CAP,
-#   CH_MODEL_PROVIDER (anthropic|openrouter|nous-api|gemini), CH_MODEL, CH_MODEL_API_KEY, CH_AI_TEST=yes|no,
+#   CH_MODEL_PROVIDER (anthropic|openrouter|nous-api|gemini), CH_MODEL, CH_MODEL_API_KEY, CH_AI_TEST=yes|no
+#     (ChatGPT sign-in, provider openai-codex, needs a person to enter a code: run interactively),
 #   CH_DIR (default /opt/construction-hermes), CH_REPO_URL, CH_REF, CH_WEB_PORT (default 8640),
 #   CH_DOCKER_BUILD_FLAGS (extra flags for `docker build`).
 
@@ -389,6 +390,51 @@ connect_hermes() {
   ok "Safety check: Hermes has no shell, file, browser, web or code tools"
 }
 
+chatgpt_signin() {
+  echo
+  echo "  ${c_bold}ChatGPT sign-in${c_off} (Hermes' own login; it does not affect the ChatGPT app or Codex CLI)."
+  echo "  Hermes will print a link and a short code. Open the link on your phone or computer,"
+  echo "  sign in to ChatGPT, and enter the code. This window waits until you finish."
+  if ! (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec hermes hermes auth add openai-codex --type oauth); then
+    echo
+    echo "  If the error above mentions TLS/SSL, some networks reject the newer TLS handshake."
+    echo "  Hermes documents a workaround (classic TLS key-exchange groups); it can be applied for Hermes only."
+    if yesno "Retry the sign-in with the compatible TLS setting?" y; then
+      cexec hermes sh -c 'cat > /opt/data/openssl-classic.cnf <<CNF
+openssl_conf = openssl_init
+[openssl_init]
+ssl_conf = ssl_sect
+[ssl_sect]
+system_default = system_default_sect
+[system_default_sect]
+Groups = x25519:secp256r1:secp384r1:x448
+CNF' >>"$LOG" 2>&1 || true
+      if (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec -e OPENSSL_CONF=/opt/data/openssl-classic.cnf hermes hermes auth add openai-codex --type oauth); then
+        # The same network will need it for model calls too.
+        envset "$DIR/deploy/hermes.env" OPENSSL_CONF /opt/data/openssl-classic.cnf
+        run compose up -d --no-build --force-recreate hermes
+        ok "Signed in using the compatible TLS setting (kept for Hermes)"
+      else
+        warn "ChatGPT sign-in did not finish"
+        return
+      fi
+    else
+      warn "ChatGPT sign-in did not finish"
+      return
+    fi
+  fi
+  echo
+  echo "  Signed in. Now pick the model: in the next menu choose ${c_bold}ChatGPT or Codex Subscription${c_off},"
+  echo "  then the model you want (you will not be asked to sign in again)."
+  (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec hermes hermes model) || warn "model selection did not finish"
+  local prov
+  prov="$(cexec hermes hermes config get model.provider 2>/dev/null | tail -1 | tr -d '"[:space:]' || true)"
+  if [ "$prov" != "openai-codex" ]; then
+    warn "the selected provider is '${prov:-none}', not the ChatGPT subscription (openai-codex); re-run to change it"
+  fi
+  run compose restart hermes
+}
+
 model_configured() {
   local m
   m="$(cexec hermes hermes config get model.default 2>/dev/null | tail -1 | tr -d '"[:space:]' || true)"
@@ -411,14 +457,23 @@ setup_ai_model() {
     run cexec hermes hermes config set model.default "$CH_MODEL"
     run compose up -d --no-build --force-recreate hermes
     ok "Model set: $CH_MODEL_PROVIDER / $CH_MODEL"
+  elif [ "${CH_MODEL_PROVIDER:-}" = "openai-codex" ] && [ "$INTERACTIVE" != "1" ]; then
+    warn "ChatGPT sign-in needs you to enter a code; run the installer interactively (or the command in the summary)"
   elif [ "$INTERACTIVE" = "1" ]; then
-    echo "  Hermes needs an AI provider account with an API key (a Claude.ai or ChatGPT subscription"
-    echo "  is not an API key). Hermes will now show its own picker: choose a provider, paste the key,"
-    echo "  then pick a model."
-    if yesno "Set up the AI model now?" y; then
-      (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec hermes hermes model) || warn "model setup did not finish"
-      run compose restart hermes
-    fi
+    echo "  How should Hermes reach an AI model?"
+    echo "    1) Sign in with my ChatGPT account (uses your ChatGPT plan; no API key)"
+    echo "    2) API key or another provider (Anthropic, OpenRouter, Nous Portal, ...)"
+    echo "    3) Skip for now"
+    local how=""; ask how "Choose 1, 2 or 3" "1"
+    case "$how" in
+      1) chatgpt_signin ;;
+      2)
+        echo "  Hermes will show its own picker: choose a provider, sign in or paste a key, then pick a model."
+        (cd "$DIR/deploy" && docker compose -p "$PROJECT" exec hermes hermes model) || warn "model setup did not finish"
+        run compose restart hermes
+        ;;
+      *) : ;;
+    esac
   fi
   if model_configured; then
     AI_READY=1
@@ -437,7 +492,7 @@ setup_ai_model() {
     fi
   else
     AI_READY=0
-    MISSING+=("AI model: run  cd $DIR/deploy && docker compose -p $PROJECT exec hermes hermes model  then  docker compose -p $PROJECT restart hermes")
+    MISSING+=("AI model: re-run the installer and choose 'Sign in with my ChatGPT account', or run  cd $DIR/deploy && docker compose -p $PROJECT exec hermes hermes auth add openai-codex --type oauth  then  ... exec hermes hermes model  then  docker compose -p $PROJECT restart hermes")
     warn "No AI model configured yet; Hermes can't chat until you add one (see summary)"
   fi
 }
@@ -564,7 +619,7 @@ with session_scope() as s: print(settings.get(s,"company_name") or "")' 2>/dev/n
     echo "Login: the username you chose (password is not stored here)"
     echo "Mode: SHADOW - drafts and records only; nothing is sent to customers/vendors until you switch to LIVE in More -> System."
     echo "Telegram: $([ -n "$tg" ] && echo "connected to the bot; send it a message to start" || echo "not set up")"
-    echo "AI model: $([ "${AI_READY:-0}" = 1 ] && echo ready || echo "not set up")"
+    echo "AI model: $([ "${AI_READY:-0}" = 1 ] && echo "ready ($(cexec hermes hermes config get model.provider 2>/dev/null | tail -1 | tr -d '"[:space:]' || true) / $(cexec hermes hermes config get model.default 2>/dev/null | tail -1 | tr -d '"[:space:]' || true))" || echo "not set up")"
     echo "Backups: $BACKUP_DIR (encrypted; key $ETC/backup.key)"
     echo
     echo "Still needed from you:"
@@ -576,6 +631,8 @@ with session_scope() as s: print(settings.get(s,"company_name") or "")' 2>/dev/n
     echo "  Health:      docker compose -p $PROJECT exec web chops health"
     echo "  Logs:        docker compose -p $PROJECT logs -f --tail 100 hermes web worker"
     echo "  Kill switch: docker compose -p $PROJECT exec web chops kill-switch on --reason \"...\""
+    echo "  AI plan usage (ChatGPT 5-hour/weekly limits): docker compose -p $PROJECT exec hermes hermes usage"
+    echo "  Re-do ChatGPT sign-in: docker compose -p $PROJECT exec hermes hermes auth add openai-codex --type oauth"
     echo "  Upgrade / change answers: run the same install command again"
     echo "  Docs: $DIR/docs/RUNBOOK.md"
   } >"$SUMMARY"

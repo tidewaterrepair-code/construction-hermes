@@ -12,6 +12,9 @@ model:
 auth:
   # Never borrow Claude Code / Codex CLI logins from this machine.
   adopt_external_logins: false
+  # ChatGPT sign-in (provider openai-codex) on a headless server: open a link, enter a code.
+  # Hermes keeps its own login in HERMES_HOME/auth.json (the hermes_data volume).
+  codex_login_flow: device_code
 
 mcp_servers:
   construction:

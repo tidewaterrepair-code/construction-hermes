@@ -6,7 +6,7 @@ check), **live delivery** (authorized real send). Nothing below is live-delivery
 | Integration | Purpose | Status | Verification | Blocker / next step |
 |---|---|---|---|---|
 | Hermes Agent v2026.9.24 ↔ MCP | Coordinator ↔ tools | Connected (build container) | Live: connect + 31 tools discovered, skills loaded, toolset restrictions | Deploy on VPS |
-| Model provider | Hermes reasoning | **Disconnected** | Hermes fails visibly without a key | Owner provides an API key + model choice + budget |
+| Model provider | Hermes reasoning | **Disconnected** | Hermes fails visibly without credentials; ChatGPT sign-in (`openai-codex`, device code) confirmed in v2026.9.24 CLI/docs and starts correctly; login not completed (build sandbox blocks auth.openai.com) | Owner signs in with ChatGPT during install (or adds an API key) |
 | Telegram (Hermes gateway) | Phone chat | **Disconnected** | — | `TELEGRAM_BOT_TOKEN` + owner numeric ID in `TELEGRAM_ALLOWED_USERS` |
 | Chat approvals (MCP elicitation) | Approve from chat | Off by default | Contract test (mocked client) | Enable after Telegram works and allowlist = owner only; then live-test |
 | Telegram owner alerts (worker) | Routine digests | **Disconnected** | Contract tests (timeouts, 429) | Bot token + owner chat id; LIVE mode |

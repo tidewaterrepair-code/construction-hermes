@@ -10,7 +10,7 @@ track cost and cash, and see what needs attention — from a phone.
   calculation, approval and outbound action. The phone dashboard and Hermes call the same
   service functions, so the rules are the same on both.
 
-Status: **BLOCKED for deployment** (no VPS access from the build session; no model provider key).
+Status: **BLOCKED for deployment** (no VPS access from the build session; model sign-in pending).
 The software is built, tested, and ready to commission in **SHADOW** once those exist. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) and [`docs/CHECKPOINT.md`](docs/CHECKPOINT.md).
 
@@ -25,10 +25,10 @@ curl -fsSL https://raw.githubusercontent.com/tidewaterrepair-code/construction-h
 It checks the server, asks a few questions (your login, company name, Telegram, phone access,
 AI usage cap), installs Docker if missing, builds and starts everything in its own isolated
 Docker project, connects Hermes to the construction tools, walks you through picking an AI
-model, sets up nightly encrypted backups, starts in **SHADOW** mode (nothing is sent), and prints
+model (ChatGPT sign-in by default), sets up nightly encrypted backups, starts in **SHADOW** mode (nothing is sent), and prints
 a summary. Have ready (optional, can be added later by re-running):
 
-- an AI provider API key (Anthropic, OpenRouter, ...) — a Claude.ai/ChatGPT subscription is not an API key
+- your **ChatGPT account** (the installer's default: Hermes signs in with a link + code, no API key), or an API key for another provider (Anthropic, OpenRouter, ...)
 - a Telegram bot token from @BotFather and your numeric user ID from @userinfobot
 - a free Tailscale account if you want to open the dashboard from your phone
 

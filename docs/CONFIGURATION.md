@@ -39,6 +39,18 @@ Tax treatment: the system does not decide Virginia tax rules. Choose a `tax_mode
   `docker compose exec hermes hermes config set model.default <provider/model>`.
 - Hermes picks a provider automatically from available credentials (`provider: auto`). Only
   put the credential you intend to pay for in `hermes.env`.
+- **ChatGPT sign-in (default in the installer).** Hermes supports signing in with a ChatGPT
+  account as provider `openai-codex` (verified in v2026.9.24 docs and CLI): device-code login on a
+  headless server — `docker compose -p construction-hermes exec hermes hermes auth add openai-codex --type oauth`,
+  open the link, enter the code; then `... exec hermes hermes model` → **ChatGPT or Codex
+  Subscription** → model; then `docker compose -p construction-hermes restart hermes`. Hermes keeps its own
+  login in `auth.json` inside the `hermes_data` volume (survives restarts and upgrades; not in the
+  app backups, so after a full server loss you sign in again). `auth.adopt_external_logins: false`
+  only stops Hermes from borrowing a Codex CLI login on the same machine; its own login is unaffected.
+  Plan limits: `... exec hermes hermes usage` shows the 5-hour/weekly windows. Hermes' docs do not
+  state which ChatGPT plans qualify or how usage counts against them. If the login fails with a
+  TLS error, the installer offers Hermes' documented workaround (classic TLS groups via
+  `OPENSSL_CONF`), applied to the Hermes container only.
 
 ## Users and roles
 
